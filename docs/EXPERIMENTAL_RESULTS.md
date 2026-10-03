@@ -1,96 +1,118 @@
 # Experimental Results & Benchmarking Dossier
 
-> **DISCLAIMER:** All figures, telemetry, costs, and emissions in this dossier are derived from **strictly synthetic models** formulated for the Phase-1 prototype demonstration. No proprietary vessel telemetry or real commercial operations were utilized.
+> **DISCLAIMER:** All figures, operational costs, fuel consumptions, and lifecycle emissions in this dossier are derived from **strictly synthetic models** formulated for the Phase-1 prototype demonstration. No proprietary vessel telemetry or real commercial operations were utilized.
 
-**Execution Timestamp:** Local evaluation run  
-**Total Benchmark Runtime:** 197.95 seconds  
-**Hardware Profile:** Local Classical CPU (No Quantum Hardware, No Qiskit, No Emulators)
+**Execution Status:** Full Reproducible Batch Run Completed  
+**Total Benchmark Runtime:** 2972.32 seconds  
+**Hardware Profile:** Local Classical CPU (No Quantum Hardware, No Qiskit, No Emulators)  
+**Cross-Validation:** Repeated 10-Fold CV (20 Paired Folds) with Two-Sided Wilcoxon Signed-Rank Test  
+**Optimization Budget:** 20,000 Function Evaluations per Algorithm across 10 Independent Seeds  
 
 ---
 
 ## 1. Fuel Consumption Prediction Benchmark
 
-Models were trained and evaluated on 6,500 synthetic voyage records (80/20 train/test split). A paired **Wilcoxon signed-rank significance test** was conducted across 5 cross-validation folds.
+Models were trained and evaluated on 6,500 synthetic voyage records (80/20 train/test split). A repeated 10-fold cross-validation (20 paired folds) with a two-sided **Wilcoxon signed-rank test** was conducted to verify statistical significance without bare fallbacks.
 
 ### 1.1 Model Performance Comparison (Test Set)
 
 | Model Architecture | Test RMSE (tonnes) | Test MAE (tonnes) | Test $R^2$ Score | Optimization / Tuning |
 | :--- | :---: | :---: | :---: | :--- |
 | **Polynomial Ridge (Degree 2)** | 7.0418 | 5.0423 | 0.9906 | Analytical L2 Regularization |
-| **Gradient Boosting (Default)** | 10.0418 | 6.9952 | 0.9809 | Fixed hyperparameters (lr=0.1, depth=3) |
-| **Quantum-Inspired Predictor** | 7.1874 | 5.0701 | 0.9902 | QIEA Feature Mask & Discretized Hyperparameters |
+| **Gradient Boosting (Default)** | 10.0418 | 6.9952 | 0.9809 | Fixed default hyperparameters |
+| **Quantum-Inspired Predictor** | 6.5531 | 4.2915 | 0.9919 | QIEA Feature Selection & Hyperparameter Tuning |
 
-### 1.2 Paired Wilcoxon Signed-Rank Significance Test
+### 1.2 Two-Sided Paired Wilcoxon Signed-Rank Significance Test
 
-| Baseline Comparison | Wilcoxon W-Statistic | p-value | Statistically Significant ($p < 0.05$)? | Plain-Language Interpretation |
+| Baseline Comparison | Wilcoxon W-Statistic | p-value | Statistically Significant ($p < 0.05$)? | Direction & Interpretation |
 | :--- | :---: | :---: | :---: | :--- |
-| **vs Polynomial Ridge** | 0.0 | 1.0000 | False | No statistically significant difference detected (p = 1.0000 >= 0.05). Both achieve comparable predictive error. |
-| **vs Gradient Boosting** | 15.0 | 0.0312 | True | Statistically significant improvement (p = 0.0312 < 0.05). |
+| **vs Polynomial Ridge** | 92.0 | 0.6477 | False | No statistically significant difference (p = 0.6477 >= 0.05, two-sided): QIEA-tuned model RMSE (6.9997) is comparable to Polynomial Ridge (7.0342 tonnes). |
+| **vs Gradient Boosting** | 0.0 | 0.0000 | True | Statistically significant difference (p = 0.0000 < 0.05, two-sided): QIEA-tuned model achieved lower mean RMSE (6.9997 vs 10.4657 tonnes). |
 
-**Key Finding:** Polynomial Ridge regression excels at learning smooth continuous polynomial hydrodynamic curves ($V^3$ and displacement scaling). QIEA effectively tuned Gradient Boosting hyperparameters to substantially reduce error over the default tree baseline (7.19 vs 10.04 RMSE).
+> **Architectural Note on Hydrodynamic Data:** Polynomial Ridge regression closely matches or outperforms tree-based models on this benchmark because the synthetic data generation engine is grounded in classical naval architecture physics (cubic speed law $P \propto V^3$ and Admiralty coefficients with deadweight displacement scaling), which are near-polynomial by formulation.
 
 ---
 
-## 2. Algorithmic Optimization Benchmark
+## 2. Algorithmic Optimization Benchmark (Medium Network, L = 101 Bits)
 
-Comparison of 4 algorithms on the 5-route feeder network problem ($L = 101$ decision bits) over 5 independent seeds with identical evaluation budgets.
+Benchmarking of 4 algorithms on the 5-route feeder network problem ($L = 101$ decision bits) over 10 independent seeds with identical evaluation budgets (20,000 evaluations per run).
 
 ### 2.1 Solution Quality and Convergence Summary
 
 | Algorithm               |   Best Fitness |   Mean Fitness |   Std Fitness |   Feasibility Rate (%) |   Avg Runtime (s) |   Avg Evaluations |
 |:------------------------|---------------:|---------------:|--------------:|-----------------------:|------------------:|------------------:|
-| QIEA (Quantum-Inspired) |         6.8175 |         7.6565 |        0.5369 |                    100 |             0.171 |               600 |
-| Genetic Algorithm (GA)  |         4.3868 |         6.1226 |        1.2638 |                    100 |             0.142 |               571 |
-| Particle Swarm (PSO)    |     10011.9    |     46014.6    |    26535      |                      0 |             0.174 |               600 |
-| Random Search           |    120022      |    150022      |    22804.1    |                      0 |             0.211 |               600 |
+| Genetic Algorithm (GA)  |         3.2355 |         3.3964 |        0.1136 |                    100 |             3.658 |             20000 |
+| QIEA (Quantum-Inspired) |         4.584  |       398.837  |     1178.17   |                     90 |             4.849 |             20000 |
+| Particle Swarm (PSO)    |         7.3804 |     15475.7    |    10831.8    |                     20 |             5.181 |             20000 |
+| Random Search           |    215684      |    265558      |    26149.5    |                      0 |             7.492 |             20000 |
 
-**Honest Algorithmic Analysis:**
-- **QIEA (Quantum-Inspired):** Demonstrates rapid early convergence due to its superposition initialization ($	heta = \pi/4$ and $\pi/8$) and directional rotation-gate exploration. Achieves high feasibility by maintaining probabilistic alleles without premature gene collapse.
-- **Genetic Algorithm (GA):** Performs competitively when crossover operators successfully preserve building blocks, but exhibits higher variance across random seeds.
-- **Particle Swarm Optimization (PSO):** Rapid continuous velocity updates can cause boundary oscillation when mapped to discrete binary thresholds, occasionally yielding lower feasibility in constrained spaces.
-- **Random Search:** Serves as the unguided lower bound. Fails to locate feasible solutions in high-dimensional constrained combinatorial spaces.
+### 2.2 Data-Driven Algorithmic Narrative
+
+**Empirical Benchmark Summary (4 Algorithms, Identical Evaluation Budget):**
+
+- **Overall Winner**: **Genetic Algorithm (GA)** achieved the lowest mean composite fitness (**3.3964**) with a feasibility rate of **100.0%**.
+
+- **Runner-Up**: **QIEA (Quantum-Inspired)** followed with mean fitness **398.8373** and **90.0%** feasibility.
+
+- **Genetic Algorithm (GA)**: Mean fitness = 3.3964, Feasibility = 100.0%. Canonical two-point crossover and bit-flip mutation effectively assemble building blocks across route assignments.
+
+- **QIEA (Quantum-Inspired)**: Mean fitness = 398.8373, Feasibility = 90.0%, Runtime = 4.85s (20,000 evals). Probabilistic Q-bit representation and dynamic rotation angle updates provide rapid exploration with low memory footprint.
+
+- **Particle Swarm (PSO)**: Mean fitness = 15475.6595, Feasibility = 20.0%. With dynamic inertia weight decay (0.9 -> 0.4) and velocity clipping, binary PSO explores discrete hyperplanes.
+
+- **Random Search**: Mean fitness = 265558.2612, Feasibility = 0.0%. Demonstrates the steep combinatorial challenge of satisfying simultaneous demand, frequency, vessel inventory, and reliability constraints without guided search.
 
 ---
 
 ## 3. Scalability Analysis across Network Dimensions
 
-Evaluated across Small ($L=43$), Medium ($L=101$), and Large ($L=381$, 24 routes) synthetic feeder corridors.
+Evaluated across Small ($L=39$ bits), Medium ($L=101$ bits), and Large ($L=462$ bits, 24 routes) regional networks across 10 independent random seeds with scaled evaluation budgets.
 
-| Scale                        |   Decision Bits (L) | Algorithm               |     Mean Fitness |   Feasibility Rate (%) |   Avg Runtime (s) |
-|:-----------------------------|--------------------:|:------------------------|-----------------:|-----------------------:|------------------:|
-| Small (3 Routes, 4 Options)  |                  39 | QIEA (Quantum-Inspired) |      2.2893      |                    100 |             0.038 |
-| Small (3 Routes, 4 Options)  |                  39 | Genetic Algorithm (GA)  |      2.4938      |                    100 |             0.031 |
-| Small (3 Routes, 4 Options)  |                  39 | Particle Swarm (PSO)    |      2.8077      |                    100 |             0.031 |
-| Small (3 Routes, 4 Options)  |                  39 | Random Search           |      4.3038      |                    100 |             0.036 |
-| Medium (5 Routes, 8 Options) |                 101 | QIEA (Quantum-Inspired) |      6.8963      |                    100 |             0.081 |
-| Medium (5 Routes, 8 Options) |                 101 | Genetic Algorithm (GA)  |   5010.96        |                     50 |             0.091 |
-| Medium (5 Routes, 8 Options) |                 101 | Particle Swarm (PSO)    | 105020           |                      0 |             0.095 |
-| Medium (5 Routes, 8 Options) |                 101 | Random Search           | 140022           |                      0 |             0.103 |
-| Large (24 Routes, 8 Options) |                 462 | QIEA (Quantum-Inspired) | 744887           |                      0 |             0.478 |
-| Large (24 Routes, 8 Options) |                 462 | Genetic Algorithm (GA)  |      1.81267e+06 |                      0 |             0.601 |
-| Large (24 Routes, 8 Options) |                 462 | Particle Swarm (PSO)    |      1.95055e+06 |                      0 |             0.508 |
-| Large (24 Routes, 8 Options) |                 462 | Random Search           |      2.36682e+06 |                      0 |             0.474 |
+| Scale                        |   Decision Bits (L) |   Evaluations | Algorithm               |     Best Fitness |     Mean Fitness |   Feasibility Rate (%) |   Avg Runtime (s) |
+|:-----------------------------|--------------------:|--------------:|:------------------------|-----------------:|-----------------:|-----------------------:|------------------:|
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | Genetic Algorithm (GA)  |      1.6372      |      1.7394      |                    100 |             0.716 |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | QIEA (Quantum-Inspired) |      1.7191      |      1.849       |                    100 |             0.723 |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | Particle Swarm (PSO)    |      1.8524      |    295.902       |                     80 |             1.14  |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | Random Search           |      1.9793      |  14048.2         |                     10 |             1.03  |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | Genetic Algorithm (GA)  |      3.2355      |      3.3964      |                    100 |             5.883 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | QIEA (Quantum-Inspired) |      4.584       |    398.837       |                     90 |             7.552 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | Particle Swarm (PSO)    |      7.3804      |  15475.7         |                     20 |             5.242 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | Random Search           | 215684           | 265558           |                      0 |             9.509 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | Genetic Algorithm (GA)  |     18.0065      |     67.7493      |                     90 |            30.002 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | QIEA (Quantum-Inspired) | 218805           | 256113           |                      0 |            61.032 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | Particle Swarm (PSO)    | 546151           | 866507           |                      0 |            58.058 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | Random Search           |      1.97363e+06 |      2.03678e+06 |                      0 |            80.399 |
+
+> **Scalability Root Cause Analysis:** In the 24-route synthetic network, cumulative feeder demand reaches ~1.5M TEU. When an operator fleet is restricted to only 24 vessels (1 vessel per corridor), servicing 24 routes with minimum weekly frequency (1.0-1.5 sailings/wk) is physically impossible. Scaling fleet availability proportionally (120 vessels across 4 vessel classes) and ensuring bunkering connectivity resolves the structural bottleneck, rendering the large-scale network solvable.
 
 ---
 
 ## 4. Regional Feeder Case Study Results
 
-Comparison between the conventional baseline (HFO, 15.5 kn service speeds, no cold ironing) and the QIEA multi-objective optimized fleet schedule.
+The optimized green fleet plan is compared against **two distinct feasible references**:
+1. **Feasible Naive Baseline:** Conventional HFO, fixed service speed, no shore power, adjusted until all constraints are met.
+2. **Best Conventional Baseline:** The same optimizer restricted exclusively to conventional HFO options and no shore power.
 
-### 4.1 Macro Performance Indicator Delta
+### 4.1 Comparative Performance Summary
 
-| Key Performance Indicator | Conventional Baseline | Quantum-Inspired Optimized | Delta (Improvement) | Improvement (%) |
-| :--- | :---: | :---: | :---: | :---: |
-| **Total Fuel (tonnes HFO-eq)** | 71,051.8 | 94,699.3 | -23,647.5 | **-33.28%** |
-| **Total Operating Cost (USD)** | $133,678,148.0 | $251,348,055.0 | $-117,669,908.0 | **-88.02%** |
-| **Lifecycle GHG (tonnes CO2e)** | 273,348.4 | 253,335.9 | 20,012.5 | **7.32%** |
-| **Carbon Intensity Proxy** | 18.02 g/t-nm | 11.05 g/t-nm | 6.97 g/t-nm | **Decarbonized** |
-| **Constraint Feasibility** | Violated | Feasible | Meets All Rules | **100% Feasible** |
+| Metric | Feasible Naive Baseline | Best Conventional Baseline | Multi-Objective Optimized Plan | Delta vs Naive | Delta vs Best Conv |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Total Fuel (t HFO-eq)** | 37,902.8 | 38,745.1 | 38,745.1 | +842.3 tonnes (+2.2% increase) | 0.0 tonnes (no change) |
+| **Operating Cost (USD)** | $112,719,943.0 | $130,583,222.0 | $130,583,222.0 | +17,863,279.1 USD (+15.8% increase) | 0.0 USD (no change) |
+| **Lifecycle GHG (t CO2e)** | 150,788.7 | 156,510.6 | 156,510.6 | +5,721.9 t CO2e (+3.8% increase) | 0.0 t CO2e (no change) |
+| **Carbon Intensity (g/t-nm)** | 12.74 | 13.22 | 13.22 | +0.5 g/t-nm (+3.8% increase) | 0.0 g/t-nm (no change) |
+| **Constraint Feasibility** | Feasible (100%) | Feasible (100%) | Feasible (100%) | Strictly Valid | Strictly Valid |
 
-### 4.2 Shore Power (Cold Ironing) Network Benefits
-- **Port Fuel Avoided:** 4,934.4 tonnes MGO (92.0%)
-- **Port CO2e Avoided:** 4,857.0 tonnes CO2e (23.5%)
-- **Net Port Cost Savings:** $703,245.0
+### 4.2 Operating Cost Delta & Decarbonization Trade-offs
+- **Operating Cost Delta vs Naive:** +17,863,279.1 USD (+15.8% increase)
+- **Operating Cost Delta vs Best Conventional:** 0.0 USD (no change)
+- **Lifecycle Emissions Delta vs Naive:** +5,721.9 t CO2e (+3.8% increase)
+- **Lifecycle Emissions Delta vs Best Conventional:** 0.0 t CO2e (no change)
+
+### 4.3 Shore Power (Cold Ironing) Network Benefits
+- **Port Fuel Avoided:** 3,294.3 tonnes MGO (94.9%)
+- **Port CO2e Avoided:** 3,384.4 tonnes CO2e (25.3%)
+- **Net Port Cost Delta:** $461,508.0
 
 ---
-*Report generated autonomously by `scripts/run_experiments.py`.*
+*Report generated autonomously by `scripts/run_experiments.py` from verified empirical data.*

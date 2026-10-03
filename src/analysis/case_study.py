@@ -104,9 +104,19 @@ def get_best_conventional_baseline(
     random_seed: int = 42,
 ) -> Tuple[np.ndarray, Dict[str, Any]]:
     """
-    Construct the 'Best Conventional' baseline by restricting the optimizer to
-    conventional HFO options and disabling shore power.
+    Construct the 'Best Conventional' baseline defined over restricted QIEA,
+    restricted GA and hill-climbing from the feasible naive plan (HFO only, no shore power),
+    across several seeds, all polished with 1-bit-flip local search.
+    Guarantees best_conventional.objective <= naive.objective and is_feasible=True.
     """
+    from src.optimization.baselines import BinaryGeneticAlgorithm
+
+    # 1. Start with feasible naive baseline as primary candidate
+    naive_bits, naive_eval = get_naive_baseline(problem)
+    candidates = []
+    if naive_eval["is_feasible"]:
+        candidates.append((naive_bits.copy(), naive_eval))
+
     hfo_options = [opt for opt in problem.options if opt["fuel"] == "HFO"]
     conv_problem = FleetOptimizationProblem(
         config=problem.config,
@@ -119,45 +129,95 @@ def get_best_conventional_baseline(
         shore_power_forced=False,
         carbon_intensity_cap=problem.carbon_intensity_cap,
         supply_cap_ratio=problem.supply_cap_ratio,
+        use_gray_code=problem.use_gray_code,
     )
 
-    optimizer = QIEA(
-        n_bits=conv_problem.n_bits,
-        pop_size=pop_size,
-        generations=generations,
-        random_seed=random_seed,
-        initial_theta=conv_problem.get_initial_q_angles(),
+    def _map_conv_to_full(conv_bits: np.ndarray) -> np.ndarray:
+        allocs, speeds, _ = conv_problem.decode_solution(conv_bits)
+        full_allocs = np.zeros((len(problem.options), len(problem.route_keys)), dtype=int)
+        for c_idx, opt in enumerate(hfo_options):
+            o_idx = problem.options.index(opt)
+            full_allocs[o_idx, :] = allocs[c_idx, :]
+        shore = {p: False for p in problem.port_keys}
+        return problem.encode_solution(full_allocs, speeds, shore)
+
+    # 2. Run restricted GA and QIEA across multiple seeds
+    test_seeds = [random_seed, random_seed + 1, random_seed + 2]
+    for s in test_seeds:
+        # Restricted GA
+        ga = BinaryGeneticAlgorithm(
+            n_bits=conv_problem.n_bits,
+            pop_size=min(30, pop_size),
+            generations=min(40, generations),
+            random_seed=s,
+        )
+        r_ga = ga.optimize(conv_problem.fitness_function)
+        full_ga_bits = _map_conv_to_full(r_ga["best_bits"])
+        ev_ga = problem.evaluate(full_ga_bits)
+        if ev_ga["is_feasible"]:
+            candidates.append((full_ga_bits, ev_ga))
+
+        # Restricted QIEA
+        q = QIEA(
+            n_bits=conv_problem.n_bits,
+            pop_size=min(30, pop_size),
+            generations=min(40, generations),
+            random_seed=s,
+            initial_theta=conv_problem.get_initial_q_angles(),
+        )
+        r_q = q.optimize(conv_problem.fitness_function)
+        full_q_bits = _map_conv_to_full(r_q["best_bits"])
+        ev_q = problem.evaluate(full_q_bits)
+        if ev_q["is_feasible"]:
+            candidates.append((full_q_bits, ev_q))
+
+    # 3. Polish best candidate with 1-bit-flip local search restricted to HFO and speeds
+    best_cand_bits, best_cand_eval = min(
+        candidates, key=lambda c: c[1]["fitness"] if c[1]["is_feasible"] else float("inf")
     )
-    res = optimizer.optimize(conv_problem.fitness_function)
-    allocs, speeds, _ = conv_problem.decode_solution(res["best_bits"])
 
-    # Map decoded conventional solution into the full problem's chromosome layout
-    full_bits = np.zeros(problem.n_bits, dtype=int)
-    idx = 0
-    for o_idx, opt in enumerate(problem.options):
-        for r_idx, r_k in enumerate(problem.route_keys):
-            val = 0
-            if opt in hfo_options:
-                c_idx = hfo_options.index(opt)
-                val = allocs[c_idx, r_idx]
-            full_bits[idx] = (val >> 1) & 1
-            full_bits[idx + 1] = val & 1
-            idx += 2
+    curr_bits = best_cand_bits.copy()
+    curr_fit = best_cand_eval["fitness"]
+    improved = True
+    step = 0
+    max_steps = 15
 
-    for r_k in problem.route_keys:
-        spd_val = int(round((speeds[r_k] - 10.5) / 1.0))
-        spd_val = max(0, min(7, spd_val))
-        full_bits[idx] = (spd_val >> 2) & 1
-        full_bits[idx + 1] = (spd_val >> 1) & 1
-        full_bits[idx + 2] = spd_val & 1
-        idx += 3
+    while improved and step < max_steps:
+        improved = False
+        step += 1
+        best_flip = None
+        best_f = curr_fit
 
-    for p_k in problem.port_keys:
-        full_bits[idx] = 0
-        idx += 1
+        # Flip only HFO allocation bits and speed bits (shore power stays 0)
+        for i in range(problem.n_alloc_bits + problem.n_speed_bits):
+            cand = curr_bits.copy()
+            cand[i] = 1 - cand[i]
+            # Verify no non-HFO options were activated
+            cand_allocs, cand_speeds, _ = problem.decode_solution(cand)
+            has_clean_fuel = False
+            for o_idx, opt in enumerate(problem.options):
+                if opt["fuel"] != "HFO" and np.sum(cand_allocs[o_idx, :]) > 0:
+                    has_clean_fuel = True
+                    break
+            if has_clean_fuel:
+                continue
 
-    best_conv_eval = problem.evaluate(full_bits)
-    return full_bits, best_conv_eval
+            ev = problem.evaluate(cand)
+            if ev["is_feasible"] and ev["fitness"] < best_f:
+                best_f = ev["fitness"]
+                best_flip = i
+
+        if best_flip is not None:
+            curr_bits[best_flip] = 1 - curr_bits[best_flip]
+            curr_fit = best_f
+            improved = True
+
+    final_eval = problem.evaluate(curr_bits)
+    # Ensure best conventional never exceeds naive
+    if (not final_eval["is_feasible"]) or (final_eval["fitness"] > naive_eval["fitness"]):
+        return naive_bits, naive_eval
+
+    return curr_bits, final_eval
 
 
 def simulate_monthly_operations(

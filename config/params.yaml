@@ -187,6 +187,9 @@ ports:
   mumbai:
     name: "Port of Nhava Sheva (Mumbai)"
     country: "India"
+    lat: 18.95
+    lon: 72.95
+    coordinates_note: "approximate"
     has_shore_power: true
     grid_ef_tonnes_per_mwh: 0.71        # Regional grid emission factor
     electricity_price_usd_per_mwh: 120.0
@@ -197,6 +200,9 @@ ports:
   kochi:
     name: "Port of Kochi"
     country: "India"
+    lat: 9.97
+    lon: 76.28
+    coordinates_note: "approximate"
     has_shore_power: true
     grid_ef_tonnes_per_mwh: 0.65
     electricity_price_usd_per_mwh: 115.0
@@ -207,6 +213,9 @@ ports:
   tuticorin:
     name: "V.O. Chidambaranar Port (Tuticorin)"
     country: "India"
+    lat: 8.76
+    lon: 78.13
+    coordinates_note: "approximate"
     has_shore_power: false
     grid_ef_tonnes_per_mwh: 0.70
     electricity_price_usd_per_mwh: 125.0
@@ -217,6 +226,9 @@ ports:
   chennai:
     name: "Chennai Port"
     country: "India"
+    lat: 13.08
+    lon: 80.29
+    coordinates_note: "approximate"
     has_shore_power: true
     grid_ef_tonnes_per_mwh: 0.68
     electricity_price_usd_per_mwh: 118.0
@@ -227,6 +239,9 @@ ports:
   colombo:
     name: "Port of Colombo"
     country: "Sri Lanka"
+    lat: 6.95
+    lon: 79.85
+    coordinates_note: "approximate"
     has_shore_power: true
     grid_ef_tonnes_per_mwh: 0.58
     electricity_price_usd_per_mwh: 140.0
@@ -237,6 +252,9 @@ ports:
   singapore:
     name: "Port of Singapore"
     country: "Singapore"
+    lat: 1.29
+    lon: 103.85
+    coordinates_note: "approximate"
     has_shore_power: true
     grid_ef_tonnes_per_mwh: 0.41
     electricity_price_usd_per_mwh: 155.0

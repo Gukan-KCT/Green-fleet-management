@@ -130,3 +130,72 @@ def sweep_pareto_front(
 
     pareto_front = filter_non_dominated(all_solutions)
     return all_solutions, pareto_front
+
+
+def generate_pareto_frontier(
+    problem: Optional[FleetOptimizationProblem] = None,
+    num_points: int = 10,
+    pop_size: int = 25,
+    generations: int = 40,
+    random_seed: int = 42,
+) -> Any:
+    """
+    Additive helper: sweeps cost vs emissions weights and returns a chart-ready DataFrame.
+    """
+    import pandas as pd
+    prob = problem or FleetOptimizationProblem()
+    points = []
+
+    # Sweep cost weight from 0.05 to 0.90
+    w_costs = np.linspace(0.05, 0.90, num_points)
+    for i, w_c in enumerate(w_costs):
+        w_e = max(0.05, 0.95 - w_c)
+        w_f = 0.05
+        # Re-normalize
+        tot = w_c + w_e + w_f
+        w_c, w_e, w_f = w_c / tot, w_e / tot, w_f / tot
+
+        sub_prob = FleetOptimizationProblem(
+            config=prob.config,
+            w_fuel=w_f,
+            w_cost=w_c,
+            w_emissions=w_e,
+            global_speed_cap=prob.global_speed_cap,
+            allowed_fuels=prob.allowed_fuels,
+            enable_shore_power_choice=prob.enable_shore_power_choice,
+        )
+
+        q = QIEA(
+            n_bits=sub_prob.n_bits,
+            pop_size=pop_size,
+            generations=generations,
+            random_seed=random_seed + i,
+        )
+        r = q.optimize(sub_prob.evaluate)
+        det = sub_prob.evaluate_detailed(r["best_bits"])
+
+        points.append({
+            "Operating Cost ($M)": round(det["total_cost_usd"] / 1e6, 2),
+            "Lifecycle CO2e (kt)": round(det["lifecycle_co2e_tonnes"] / 1e3, 2),
+            "Fuel (kt)": round(det["fuel_consumption_tonnes"] / 1e3, 2),
+            "is_feasible": det["is_feasible"],
+            "w_cost": w_c,
+            "w_emiss": w_e,
+        })
+
+    df = pd.DataFrame(points)
+    # Identify non-dominated on Cost and CO2e
+    df["is_pareto"] = True
+    for i in range(len(df)):
+        c_i = df.loc[i, "Operating Cost ($M)"]
+        e_i = df.loc[i, "Lifecycle CO2e (kt)"]
+        for j in range(len(df)):
+            if i != j:
+                c_j = df.loc[j, "Operating Cost ($M)"]
+                e_j = df.loc[j, "Lifecycle CO2e (kt)"]
+                if (c_j <= c_i and e_j <= e_i) and (c_j < c_i or e_j < e_i):
+                    df.loc[i, "is_pareto"] = False
+                    break
+
+    return df
+

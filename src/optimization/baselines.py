@@ -300,3 +300,106 @@ class RandomSearch:
             "convergence_curve": self.convergence_curve_,
             "evaluations": self.evaluations_count_,
         }
+
+
+class HillClimbSearch:
+    """
+    Multi-Start 1-Bit-Flip Hill Climbing Local Search Baseline.
+    Evaluates 1-bit neighboring permutations with restart mutations upon reaching local minima.
+    Enforces identical total evaluation budget and interface: `optimize(fitness_func)`.
+    """
+
+    def __init__(
+        self,
+        n_bits: int,
+        evaluations_per_generation: int = 50,
+        generations: int = 400,
+        random_seed: int = 42,
+    ):
+        self.n_bits = n_bits
+        self.evaluations_per_generation = evaluations_per_generation
+        self.generations = generations
+        self.total_budget = evaluations_per_generation * generations
+        self.random_seed = random_seed
+
+        self.evaluations_count_ = 0
+        self.best_bits_: Optional[np.ndarray] = None
+        self.best_fitness_: float = float("inf")
+        self.convergence_curve_: List[float] = []
+
+    def optimize(
+        self,
+        fitness_func: Callable[[np.ndarray], float],
+        progress_callback: Optional[Callable[[int, int, float], None]] = None,
+        seed_bits: Optional[np.ndarray] = None,
+    ) -> Dict[str, Any]:
+        rng = np.random.default_rng(self.random_seed)
+        self.evaluations_count_ = 0
+        self.convergence_curve_ = []
+
+        if seed_bits is not None:
+            current_bits = seed_bits.copy()
+        else:
+            # Sparse random initialization
+            current_bits = (rng.random(self.n_bits) < 0.15).astype(int)
+
+        current_fit = float(fitness_func(current_bits))
+        self.evaluations_count_ += 1
+
+        global_best_bits = current_bits.copy()
+        global_best_fit = current_fit
+        self.convergence_curve_.append(global_best_fit)
+
+        gen_eval_step = self.evaluations_per_generation
+
+        while self.evaluations_count_ < self.total_budget:
+            perm = rng.permutation(self.n_bits)
+            improved = False
+            for bit_idx in perm:
+                if self.evaluations_count_ >= self.total_budget:
+                    break
+                cand = current_bits.copy()
+                cand[bit_idx] = 1 - cand[bit_idx]
+                f = float(fitness_func(cand))
+                self.evaluations_count_ += 1
+
+                if f < current_fit:
+                    current_bits = cand
+                    current_fit = f
+                    improved = True
+
+                    if current_fit < global_best_fit:
+                        global_best_fit = current_fit
+                        global_best_bits = current_bits.copy()
+
+                if self.evaluations_count_ % gen_eval_step == 0:
+                    self.convergence_curve_.append(global_best_fit)
+                    if progress_callback:
+                        progress_callback(
+                            len(self.convergence_curve_), self.generations, global_best_fit
+                        )
+
+            # If local minimum reached and evaluations budget remains, perturb candidate
+            if not improved and self.evaluations_count_ < self.total_budget:
+                n_mut = rng.integers(2, 6)
+                mut_bits = rng.choice(self.n_bits, size=n_mut, replace=False)
+                cand = current_bits.copy()
+                cand[mut_bits] = 1 - cand[mut_bits]
+                f = float(fitness_func(cand))
+                self.evaluations_count_ += 1
+                current_bits = cand
+                current_fit = f
+
+        while len(self.convergence_curve_) < self.generations:
+            self.convergence_curve_.append(global_best_fit)
+
+        self.best_bits_ = global_best_bits
+        self.best_fitness_ = global_best_fit
+
+        return {
+            "best_bits": self.best_bits_,
+            "best_fitness": self.best_fitness_,
+            "convergence_curve": self.convergence_curve_,
+            "evaluations": self.evaluations_count_,
+        }
+

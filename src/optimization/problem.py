@@ -71,6 +71,7 @@ class FleetOptimizationProblem:
         shore_power_forced: Optional[bool] = None,
         carbon_intensity_cap: Optional[float] = None,
         supply_cap_ratio: Optional[float] = None,
+        use_gray_code: Optional[bool] = None,
     ):
         self.config = config or load_config()
         self.options = candidate_options or DEFAULT_CANDIDATE_OPTIONS
@@ -86,6 +87,11 @@ class FleetOptimizationProblem:
         self.shore_power_forced = shore_power_forced
 
         opt_cfg = self.config["optimization"]
+        self.use_gray_code = (
+            use_gray_code
+            if use_gray_code is not None
+            else bool(opt_cfg.get("use_gray_code", False))
+        )
         self.penalty_weight = float(opt_cfg.get("penalty_weight_large", 10000.0))
         self.max_vessels_per_option = int(opt_cfg.get("max_vessels_per_option", 4))
         self.speed_levels_count = int(opt_cfg.get("speed_levels_count", 8))
@@ -157,14 +163,23 @@ class FleetOptimizationProblem:
                 b0 = bits[idx]
                 b1 = bits[idx + 1]
                 idx += 2
-                val = (b0 << 1) | b1
+                if self.use_gray_code:
+                    val = (b0 << 1) | (b0 ^ b1)
+                else:
+                    val = (b0 << 1) | b1
                 allocations[o, r] = min(val, self.max_vessels_per_option)
 
         # 2. Decode speeds per route
         speeds = {}
         for r_idx, r_key in enumerate(self.route_keys):
             r_cfg = self.routes[r_key]
-            speed_bits = (bits[idx] << 2) | (bits[idx + 1] << 1) | bits[idx + 2]
+            if self.use_gray_code:
+                c0 = bits[idx]
+                c1 = c0 ^ bits[idx + 1]
+                c2 = c1 ^ bits[idx + 2]
+                speed_bits = (c0 << 2) | (c1 << 1) | c2
+            else:
+                speed_bits = (bits[idx] << 2) | (bits[idx + 1] << 1) | bits[idx + 2]
             idx += 3
 
             # Map speed level to [min_speed, max_speed]
@@ -184,6 +199,104 @@ class FleetOptimizationProblem:
             idx += 1
 
         return allocations, speeds, shore_power
+
+    def encode_solution(
+        self,
+        allocations: np.ndarray,
+        speeds: Dict[str, float],
+        shore_power: Dict[str, bool],
+    ) -> np.ndarray:
+        """
+        Encode decisions (allocations, speeds, shore_power) into a binary chromosome.
+        Respects self.use_gray_code setting.
+        """
+        bits = np.zeros(self.n_bits, dtype=int)
+        idx = 0
+        n_opts = len(self.options)
+        n_routes = len(self.route_keys)
+
+        for o in range(n_opts):
+            for r in range(n_routes):
+                val = int(allocations[o, r])
+                if self.use_gray_code:
+                    g = val ^ (val >> 1)
+                    bits[idx] = (g >> 1) & 1
+                    bits[idx + 1] = g & 1
+                else:
+                    bits[idx] = (val >> 1) & 1
+                    bits[idx + 1] = val & 1
+                idx += 2
+
+        for r_key in self.route_keys:
+            r_cfg = self.routes[r_key]
+            cap = float(r_cfg.get("speed_cap_knots", 18.0)) + self.speed_cap_delta
+            v_min = 11.0
+            v_max = max(v_min + 1.0, cap)
+            spd = float(speeds.get(r_key, v_min))
+            frac = max(0.0, min(1.0, (spd - v_min) / max(1e-4, v_max - v_min)))
+            spd_idx = int(round(frac * (self.speed_levels_count - 1.0)))
+            spd_idx = max(0, min(self.speed_levels_count - 1, spd_idx))
+
+            if self.use_gray_code:
+                g = spd_idx ^ (spd_idx >> 1)
+                bits[idx] = (g >> 2) & 1
+                bits[idx + 1] = (g >> 1) & 1
+                bits[idx + 2] = g & 1
+            else:
+                bits[idx] = (spd_idx >> 2) & 1
+                bits[idx + 1] = (spd_idx >> 1) & 1
+                bits[idx + 2] = spd_idx & 1
+            idx += 3
+
+        for p_key in self.port_keys:
+            bits[idx] = 1 if shore_power.get(p_key, False) else 0
+            idx += 1
+
+        return bits
+
+    def repair_solution(self, bits: np.ndarray) -> np.ndarray:
+        """
+        Constraint repair operator:
+        1. Enforces fleet availability limits by trimming allocations from routes with excess vessels.
+        2. Reduces route speed in severe weather to satisfy operational schedule reliability.
+        """
+        allocations, speeds, shore_power = self.decode_solution(bits)
+        modified = False
+
+        # 1. Enforce fleet availability
+        used_by_type = {}
+        for o_idx, opt in enumerate(self.options):
+            v_t = opt["vessel"]
+            used_by_type[v_t] = used_by_type.get(v_t, 0) + int(np.sum(allocations[o_idx, :]))
+
+        for v_t, count in used_by_type.items():
+            avail = int(self.config["vessel_types"][v_t].get("fleet_available", 6))
+            while count > avail:
+                opt_indices = [i for i, opt in enumerate(self.options) if opt["vessel"] == v_t]
+                max_v, best_o, best_r = 0, None, None
+                for o in opt_indices:
+                    for r in range(len(self.route_keys)):
+                        if allocations[o, r] > max_v:
+                            max_v = allocations[o, r]
+                            best_o, best_r = o, r
+                if best_o is not None and max_v > 0:
+                    allocations[best_o, best_r] -= 1
+                    count -= 1
+                    modified = True
+                else:
+                    break
+
+        # 2. Reliability repair
+        for r_key in self.route_keys:
+            r_cfg = self.routes[r_key]
+            w = float(r_cfg.get("weather_severity", 0.3)) * self.weather_multiplier
+            if w > 0.32 and speeds[r_key] > 13.0:
+                speeds[r_key] = 11.5
+                modified = True
+
+        if not modified:
+            return bits
+        return self.encode_solution(allocations, speeds, shore_power)
 
     def evaluate(self, bits: np.ndarray) -> Dict[str, Any]:
         """

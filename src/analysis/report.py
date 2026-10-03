@@ -252,3 +252,72 @@ def generate_html_report(
 </html>
 """
     return html
+
+
+def generate_standalone_html_report(
+    opt_eval: Dict[str, Any],
+    naive_eval: Dict[str, Any],
+    best_conv_eval: Dict[str, Any],
+    df_routes: pd.DataFrame,
+) -> str:
+    """
+    Convenience additive helper: builds HTML executive report directly from evaluations and route dataframe.
+    """
+    from src.analysis.case_study import simulate_monthly_operations, format_signed_change
+
+    def _pack(ev):
+        return {
+            "fuel_t": int(round(ev.get("fuel_consumption_tonnes", 0.0))),
+            "cost_usd": float(ev.get("total_cost_usd", 0.0)),
+            "emissions_t": float(ev.get("lifecycle_co2e_tonnes", 0.0)),
+            "ci_g_tnm": round(float(ev.get("carbon_intensity_g_tnm", 0.0)), 2),
+            "feasible": ev.get("is_feasible", False),
+        }
+
+    n_p = _pack(naive_eval)
+    c_p = _pack(best_conv_eval)
+    o_p = _pack(opt_eval)
+
+    def _diff_label(val_o, val_b, unit=""):
+        d = val_o - val_b
+        pct = (d / max(1e-4, val_b)) * 100.0
+        return format_signed_change(d, pct, unit)
+
+    vs_n = {
+        "cost_delta_usd": o_p["cost_usd"] - n_p["cost_usd"],
+        "cost_label": _diff_label(o_p["cost_usd"], n_p["cost_usd"], "USD"),
+        "fuel_label": _diff_label(o_p["fuel_t"], n_p["fuel_t"], "tonnes"),
+        "emissions_label": _diff_label(o_p["emissions_t"], n_p["emissions_t"], "t CO2e"),
+        "ci_label": _diff_label(o_p["ci_g_tnm"], n_p["ci_g_tnm"], "g/t-nm"),
+    }
+    vs_c = {
+        "cost_delta_usd": o_p["cost_usd"] - c_p["cost_usd"],
+        "cost_label": _diff_label(o_p["cost_usd"], c_p["cost_usd"], "USD"),
+        "fuel_label": _diff_label(o_p["fuel_t"], c_p["fuel_t"], "tonnes"),
+        "emissions_label": _diff_label(o_p["emissions_t"], c_p["emissions_t"], "t CO2e"),
+        "ci_label": _diff_label(o_p["ci_g_tnm"], c_p["ci_g_tnm"], "g/t-nm"),
+    }
+
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    monthly_rows = []
+    for m in months:
+        monthly_rows.append({
+            "Month": m,
+            "Optimized Fuel (t)": round(o_p["fuel_t"] / 12, 1),
+            "Optimized Cost ($M)": round(o_p["cost_usd"] / 12e6, 2),
+            "Optimized CO2e (kt)": round(o_p["emissions_t"] / 12e3, 2),
+        })
+    df_monthly = pd.DataFrame(monthly_rows)
+    case_data = {
+        "summary": {
+            "naive": n_p,
+            "best_conventional": c_p,
+            "optimized": o_p,
+            "vs_naive": vs_n,
+            "vs_best_conventional": vs_c,
+        },
+        "df_routes": df_routes,
+        "df_monthly": df_monthly,
+    }
+    return generate_html_report(case_data)
+
