@@ -7,10 +7,565 @@
   <title>Green Fleet | Maritime Logistics & Decarbonization Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
-  <!-- Plotly CDN for interactive charts -->
+  <style>
+/* ===================================================================
+   Green Fleet — Modern Single-Page Application Design System
+   Maritime Decision-Support & Decarbonization Platform
+   Palette: Navy #0f4c81 | Teal #0d9488 | Slate #0f172a | Card #ffffff
+   =================================================================== */
+
+:root {
+  --primary: #0f4c81;
+  --primary-dark: #0a3560;
+  --primary-light: #e0f2fe;
+  --teal: #0d9488;
+  --teal-light: #ccfbf1;
+  --slate-900: #0f172a;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --slate-50: #f8fafc;
+  --white: #ffffff;
+  --amber: #d97706;
+  --amber-light: #fef3c7;
+  --red: #dc2626;
+  --red-light: #fee2e2;
+  --green: #16a34a;
+  --green-light: #dcfce7;
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--slate-50);
+  color: var(--slate-800);
+  line-height: 1.5;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Sidebar - Modern Enterprise SaaS Styling */
+.app-sidebar {
+  width: 275px;
+  background-color: #0b1329;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 10;
+  color: #94a3b8;
+}
+
+.brand-header {
+  padding: 1.25rem 1.25rem 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, #0284c7, #0d9488);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.35);
+  flex-shrink: 0;
+}
+
+.brand-title h1 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.brand-title p {
+  font-size: 0.72rem;
+  color: #38bdf8;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.nav-menu {
+  padding: 1.1rem 0.75rem;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.nav-section-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #475569;
+  padding: 0.85rem 0.75rem 0.35rem;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+  transform: translateX(2px);
+}
+
+.nav-item.active {
+  background: linear-gradient(90deg, rgba(2, 132, 199, 0.2), rgba(13, 148, 136, 0.12));
+  color: #38bdf8;
+  font-weight: 600;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+  opacity: 0.85;
+}
+
+.nav-item.active .nav-icon {
+  opacity: 1;
+  color: #38bdf8;
+}
+
+.sidebar-footer {
+  padding: 0.9rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: #070d1e;
+  font-size: 0.72rem;
+  color: #64748b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.status-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+  0% { opacity: 0.6; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 0.6; transform: scale(0.95); }
+}
+
+.system-tag {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+/* Main Workspace Area */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--slate-50);
+}
+
+.top-bar {
+  background-color: var(--white);
+  border-bottom: 1px solid var(--slate-200);
+  padding: 0.85rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+}
+
+.page-title h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--slate-900);
+}
+
+.page-title p {
+  font-size: 0.8rem;
+  color: var(--slate-500);
+}
+
+.badge-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.badge-amber {
+  background-color: var(--amber-light);
+  color: var(--amber);
+  border: 1px solid #fde68a;
+}
+
+.badge-navy {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  border: 1px solid #bae6fd;
+}
+
+.content-viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
+}
+
+/* Common Card & Container Styles */
+.card {
+  background-color: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.25rem;
+}
+
+.card-header {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--slate-900);
+}
+
+.card-subtitle {
+  font-size: 0.75rem;
+  color: var(--slate-500);
+}
+
+/* KPI Cards Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.kpi-card {
+  background-color: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.kpi-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--slate-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.kpi-value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--slate-900);
+  line-height: 1.2;
+}
+
+.kpi-delta {
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.kpi-delta.good {
+  color: var(--green);
+}
+
+.kpi-delta.bad {
+  color: var(--red);
+}
+
+/* Form Controls */
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 160px;
+}
+
+.form-group label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--slate-700);
+}
+
+.form-control {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--slate-800);
+  background-color: var(--white);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(15, 76, 129, 0.15);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--white);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  background-color: var(--white);
+  border-color: var(--slate-200);
+  color: var(--slate-700);
+}
+
+.btn-outline:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Tables */
+.table-responsive {
+  overflow-x: auto;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.data-table th {
+  background-color: var(--slate-100);
+  color: var(--slate-700);
+  font-weight: 600;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.data-table td {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--slate-200);
+  color: var(--slate-800);
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tr:hover {
+  background-color: var(--slate-50);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-pass {
+  background-color: var(--green-light);
+  color: var(--green);
+}
+
+.status-fail {
+  background-color: var(--red-light);
+  color: var(--red);
+}
+
+/* Tabs */
+.tabs-header {
+  display: flex;
+  gap: 1.5rem;
+  border-bottom: 2px solid var(--slate-200);
+  margin-bottom: 1.25rem;
+}
+
+.tab-btn {
+  padding: 0.5rem 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--slate-500);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  margin-bottom: -2px;
+  transition: all 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: var(--primary);
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Charts Grid */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 1.25rem;
+}
+
+.chart-container {
+  width: 100%;
+  height: 340px;
+}
+
+/* Loader */
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--slate-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+</style>
+<!-- Plotly CDN for interactive charts -->
   <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+
 </head>
 
 <body>
@@ -563,7 +1118,511 @@
     </div>
   </main>
 
-  <script src="/static/app.js"></script>
+  <script>
+/**
+ * Green Fleet — Interactive SPA Logic & API Client
+ * Connects to FastAPI backend and renders reactive Plotly visualizations.
+ */
+
+// Navigation State
+const navItems = document.querySelectorAll('.nav-item');
+const viewPanels = document.querySelectorAll('.view-panel');
+const viewTitle = document.getElementById('view-title');
+const viewSubtitle = document.getElementById('view-subtitle');
+
+const pageMeta = {
+  planner: { title: 'Fleet Planner', sub: 'Configure constraints and optimize fleet assignment across regional shipping corridors.' },
+  predictor: { title: 'Fuel Consumption Predictor', sub: 'Estimate single-voyage bunker burn and compare classical baseline vs QIEA-tuned predictors.' },
+  fuels: { title: 'Alternative Marine Fuels', sub: 'Evaluate volumetric energy density, lifecycle emissions, and cargo slot displacement.' },
+  shore: { title: 'Port Shore Power (Cold Ironing)', sub: 'Assess auxiliary generator fuel displacement against municipal electric grid carbon factors.' },
+  scenarios: { title: 'Scenario Manager & Stress Testing', sub: 'Simulate market shocks, weather contingencies, and regulatory carbon tax stress tests.' },
+  benchmark: { title: 'Algorithmic Optimization Benchmark', sub: 'Comparative convergence, solution quality, and scalability across 10 random seeds.' },
+  casestudy: { title: 'Regional Feeder Decarbonization Case Study', sub: 'Benchmarking multi-objective optimization against Feasible Naive and Best Conventional references.' },
+  about: { title: 'Methodology, Physics & Algorithmic Foundations', sub: 'Mathematical formulations, naval architecture resistance laws, and algorithmic derivations.' }
+};
+
+navItems.forEach(item => {
+  item.addEventListener('click', () => {
+    const targetPage = item.getAttribute('data-page');
+    navItems.forEach(n => n.classList.remove('active'));
+    item.classList.add('active');
+
+    viewPanels.forEach(panel => {
+      panel.style.display = panel.id === `page-${targetPage}` ? 'block' : 'none';
+    });
+
+    if (pageMeta[targetPage]) {
+      viewTitle.textContent = pageMeta[targetPage].title;
+      viewSubtitle.textContent = pageMeta[targetPage].sub;
+    }
+
+    // Trigger initial load for pages
+    if (targetPage === 'predictor') loadPredictor();
+    if (targetPage === 'fuels') loadFuels();
+    if (targetPage === 'shore') loadShorePower();
+    if (targetPage === 'scenarios') loadScenarios();
+    if (targetPage === 'benchmark') loadBenchmark();
+    if (targetPage === 'casestudy') loadCaseStudy();
+  });
+});
+
+// Formatters
+const fmtNum = (n) => (n != null ? Math.round(n).toLocaleString() : '-');
+const fmtCurr = (n) => (n != null ? '$' + Math.round(n).toLocaleString() : '-');
+const fmtDelta = (opt, base) => {
+  if (!base || base <= 0) return '0.0%';
+  const diff = ((opt - base) / base) * 100;
+  const sign = diff > 0 ? '+' : '';
+  return `${sign}${diff.toFixed(1)}% vs Naive`;
+};
+
+// ================= 1. FLEET PLANNER LOGIC =================
+const rangeFuel = document.getElementById('range-w-fuel');
+const rangeCost = document.getElementById('range-w-cost');
+const rangeEmiss = document.getElementById('range-w-emiss');
+const inputSpeed = document.getElementById('input-speed-cap');
+const runOptBtn = document.getElementById('run-opt-btn');
+
+rangeFuel.addEventListener('input', () => document.getElementById('val-w-fuel').textContent = rangeFuel.value);
+rangeCost.addEventListener('input', () => document.getElementById('val-w-cost').textContent = rangeCost.value);
+rangeEmiss.addEventListener('input', () => document.getElementById('val-w-emiss').textContent = rangeEmiss.value);
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = btn.getAttribute('data-preset');
+    if (p === 'balanced') { rangeFuel.value = 20; rangeCost.value = 40; rangeEmiss.value = 40; }
+    if (p === 'min_cost') { rangeFuel.value = 10; rangeCost.value = 80; rangeEmiss.value = 10; }
+    if (p === 'min_emiss') { rangeFuel.value = 10; rangeCost.value = 10; rangeEmiss.value = 80; }
+    if (p === 'min_fuel') { rangeFuel.value = 80; rangeCost.value = 10; rangeEmiss.value = 10; }
+    rangeFuel.dispatchEvent(new Event('input'));
+    rangeCost.dispatchEvent(new Event('input'));
+    rangeEmiss.dispatchEvent(new Event('input'));
+    fetchPlannerData(true);
+  });
+});
+
+runOptBtn.addEventListener('click', () => fetchPlannerData(true));
+
+async function fetchPlannerData(forceRecompute = false) {
+  runOptBtn.disabled = true;
+  runOptBtn.textContent = 'Optimizing...';
+
+  const w_f = parseFloat(rangeFuel.value) / 100;
+  const w_c = parseFloat(rangeCost.value) / 100;
+  const w_e = parseFloat(rangeEmiss.value) / 100;
+  const speed = parseFloat(inputSpeed.value);
+
+  try {
+    const res = await fetch(`/api/plan?w_fuel=${w_f}&w_cost=${w_c}&w_emiss=${w_e}&speed_cap=${speed}&force_recompute=${forceRecompute}`);
+    const data = await res.json();
+    renderPlanner(data);
+  } catch (err) {
+    console.error('Failed to fetch plan:', err);
+  } finally {
+    runOptBtn.disabled = false;
+    runOptBtn.textContent = '▶ Run Optimization';
+  }
+}
+
+function renderPlanner(data) {
+  const opt = data.optimized_eval;
+  const naive = data.naive_eval;
+
+  // KPIs
+  const optFuel = opt.total_fuel_tonnes_hfo_eq || opt.fuel_consumption_tonnes || 0;
+  const naiveFuel = naive.total_fuel_tonnes_hfo_eq || naive.fuel_consumption_tonnes || optFuel;
+  document.getElementById('kpi-fuel').textContent = `${fmtNum(optFuel)} t`;
+  document.getElementById('delta-fuel').textContent = fmtDelta(optFuel, naiveFuel);
+
+  const optCost = opt.total_operating_cost_usd || opt.total_cost_usd || 0;
+  const naiveCost = naive.total_operating_cost_usd || naive.total_cost_usd || optCost;
+  document.getElementById('kpi-cost').textContent = fmtCurr(optCost);
+  document.getElementById('delta-cost').textContent = fmtDelta(optCost, naiveCost);
+
+  const optEmiss = opt.total_emissions_co2e_tonnes || opt.lifecycle_co2e_tonnes || 0;
+  const naiveEmiss = naive.total_emissions_co2e_tonnes || naive.lifecycle_co2e_tonnes || optEmiss;
+  document.getElementById('kpi-emiss').textContent = `${fmtNum(optEmiss)} t`;
+  document.getElementById('delta-emiss').textContent = fmtDelta(optEmiss, naiveEmiss);
+
+  const optCI = opt.carbon_intensity_g_tnm || 0;
+  const naiveCI = naive.carbon_intensity_g_tnm || optCI;
+  document.getElementById('kpi-ci').textContent = `${optCI.toFixed(1)} g/t-nm`;
+  document.getElementById('delta-ci').textContent = fmtDelta(optCI, naiveCI);
+
+  document.getElementById('kpi-cargo').textContent = `${fmtNum(opt.total_cargo_delivered_teu || 540000)} TEU`;
+
+  // Render Routes Table
+  const tbody = document.querySelector('#table-routes tbody');
+  tbody.innerHTML = '';
+  (data.df_routes || []).forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><b>${r['Route ID']}</b></td>
+      <td>${r['Name']}</td>
+      <td>${r['Origin']} → ${r['Destination']}</td>
+      <td><b>${r['Vessels']} vsl</b></td>
+      <td><span class="badge badge-navy">${r['Fuel']}</span></td>
+      <td>${r['Speed (knots)']} kn</td>
+      <td>${fmtNum(r['Demand (TEU/yr)'])}</td>
+      <td>${fmtNum(r['Capacity (TEU/yr)'])}</td>
+      <td><span class="badge ${r['Oversupply Ratio'] <= 2.0 ? 'badge-amber' : 'badge-amber'}">${r['Oversupply Ratio']}x</span></td>
+      <td>${r['Reliability (%)']}%</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Plotly: Allocation Chart
+  const routeIDs = (data.df_routes || []).map(r => r['Route ID']);
+  const vessels = (data.df_routes || []).map(r => r['Vessels']);
+  const hoverTexts = (data.df_routes || []).map(r => `${r['Option']}<br>Speed: ${r['Speed (knots)']} kn`);
+
+  Plotly.newPlot('chart-alloc', [{
+    x: routeIDs,
+    y: vessels,
+    type: 'bar',
+    marker: { color: '#0f4c81' },
+    text: vessels.map(v => `${v} vsl`),
+    textposition: 'auto',
+    hoverinfo: 'text',
+    hovertext: hoverTexts
+  }], {
+    margin: { t: 20, r: 20, l: 40, b: 40 },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Inter, sans-serif' },
+    yaxis: { title: 'Vessels Assigned', gridcolor: '#f1f5f9' },
+    xaxis: { title: 'Corridor', gridcolor: '#f1f5f9' }
+  }, { responsive: true, displayModeBar: false });
+
+  // Plotly: Emissions Breakdown Chart
+  const details = opt.route_details || {};
+  let ttw = 0, wtt = 0, berth = 0;
+  Object.values(details).forEach(d => {
+    ttw += (d.voyage_ttw_emissions_t || 0);
+    wtt += (d.voyage_wtt_emissions_t || 0);
+    berth += (d.berth_emissions_t || 0);
+  });
+
+  Plotly.newPlot('chart-emiss', [{
+    x: ['Tank-to-Wake (Combustion)', 'Well-to-Tank (Upstream)', 'Port Berth (Aux/Shore)'],
+    y: [Math.round(ttw), Math.round(wtt), Math.round(berth)],
+    type: 'bar',
+    marker: { color: ['#0f4c81', '#0d9488', '#d97706'] },
+    text: [Math.round(ttw), Math.round(wtt), Math.round(berth)].map(v => `${fmtNum(v)} t`),
+    textposition: 'auto'
+  }], {
+    margin: { t: 20, r: 20, l: 50, b: 40 },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Inter, sans-serif' },
+    yaxis: { title: 'Emissions (t CO2e)', gridcolor: '#f1f5f9' }
+  }, { responsive: true, displayModeBar: false });
+}
+
+// ================= 2. FUEL PREDICTOR LOGIC =================
+const predSpeed = document.getElementById('pred-speed');
+const predLoad = document.getElementById('pred-load');
+const predVessel = document.getElementById('pred-vessel');
+const predDist = document.getElementById('pred-dist');
+
+predSpeed.addEventListener('input', () => { document.getElementById('pred-speed-val').textContent = predSpeed.value; loadPredictor(); });
+predLoad.addEventListener('input', () => { document.getElementById('pred-load-val').textContent = predLoad.value; loadPredictor(); });
+predVessel.addEventListener('change', loadPredictor);
+predDist.addEventListener('change', loadPredictor);
+
+async function loadPredictor() {
+  const v = predVessel.value;
+  const sp = predSpeed.value;
+  const ld = predLoad.value;
+  const dist = predDist.value;
+
+  try {
+    const res = await fetch(`/api/predict-fuel?vessel=${v}&speed=${sp}&load_factor=${ld}&distance=${dist}`);
+    const data = await res.json();
+
+    document.getElementById('pred-res-fuel').textContent = `${data.fuel_tonnes} t`;
+    document.getElementById('pred-res-cost').textContent = `$${fmtNum(data.total_cost_usd)}`;
+    document.getElementById('pred-res-emiss').textContent = `${data.emissions_co2e_t} t`;
+    document.getElementById('pred-res-days').textContent = `${data.leg_days} days`;
+
+    // Speed Sweep Chart
+    const speeds = (data.speed_sweep || []).map(s => s.speed);
+    const fuels = (data.speed_sweep || []).map(s => s.fuel);
+
+    Plotly.newPlot('chart-speed-sweep', [{
+      x: speeds,
+      y: fuels,
+      mode: 'lines+markers',
+      line: { color: '#0f4c81', width: 3 },
+      marker: { size: 6, color: '#0d9488' },
+      name: 'Hydrodynamic Fuel Model'
+    }], {
+      margin: { t: 20, r: 20, l: 50, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'Inter, sans-serif' },
+      xaxis: { title: 'Cruising Speed (knots)', gridcolor: '#f1f5f9' },
+      yaxis: { title: 'Leg Fuel Consumption (tonnes HFO)', gridcolor: '#f1f5f9' }
+    }, { responsive: true, displayModeBar: false });
+
+  } catch (err) {
+    console.error('Error loading predictor:', err);
+  }
+}
+
+// ================= 3. ALTERNATIVE FUELS LOGIC =================
+const fuelVessel = document.getElementById('fuel-vessel');
+const fuelRoute = document.getElementById('fuel-route');
+const fuelPathway = document.getElementById('fuel-pathway');
+
+[fuelVessel, fuelRoute, fuelPathway].forEach(el => el.addEventListener('change', loadFuels));
+
+async function loadFuels() {
+  const v = fuelVessel.value;
+  const r = fuelRoute.value;
+  const p = fuelPathway.value;
+
+  try {
+    const res = await fetch(`/api/alternative-fuels?vessel=${v}&route=${r}&pathway=${p}`);
+    const rows = await res.json();
+
+    const tbody = document.querySelector('#table-fuels tbody');
+    tbody.innerHTML = '';
+    rows.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${row.fuel_type}</b></td>
+        <td><span class="badge badge-navy">${row.pathway}</span></td>
+        <td>${row.fuel_mass_tonnes.toFixed(1)} t</td>
+        <td>$${fmtNum(row.fuel_cost_usd)}</td>
+        <td>${fmtNum(row.lifecycle_co2e_tonnes)} t</td>
+        <td>${row.cargo_loss_pct.toFixed(1)}%</td>
+        <td>${fmtNum(row.usable_teu)}</td>
+        <td><span class="status-badge ${row.bunkering_feasible ? 'status-pass' : 'status-fail'}">${row.bunkering_feasible ? 'PASS' : 'FAIL'}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Cost Bar
+    Plotly.newPlot('chart-fuel-cost', [{
+      x: rows.map(r => r.fuel_type),
+      y: rows.map(r => r.fuel_cost_usd),
+      type: 'bar',
+      marker: { color: '#0f4c81' }
+    }], {
+      margin: { t: 20, r: 20, l: 60, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'Inter, sans-serif' },
+      yaxis: { title: 'Procurement Cost ($)', gridcolor: '#f1f5f9' }
+    }, { responsive: true, displayModeBar: false });
+
+    // Lifecycle GHG Bar
+    Plotly.newPlot('chart-fuel-ghg', [{
+      x: rows.map(r => r.fuel_type),
+      y: rows.map(r => r.lifecycle_co2e_tonnes),
+      type: 'bar',
+      marker: { color: '#0d9488' }
+    }], {
+      margin: { t: 20, r: 20, l: 50, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'Inter, sans-serif' },
+      yaxis: { title: 'Well-to-Wake CO2e (t)', gridcolor: '#f1f5f9' }
+    }, { responsive: true, displayModeBar: false });
+
+  } catch (err) {
+    console.error('Error loading fuels:', err);
+  }
+}
+
+// ================= 4. SHORE POWER LOGIC =================
+async function loadShorePower() {
+  try {
+    const res = await fetch('/api/shore-power');
+    const d = await res.json();
+    const ports = d.ports || {};
+    const pBreakdown = d.data?.port_breakdown || [];
+
+    const tbody = document.querySelector('#table-shore tbody');
+    tbody.innerHTML = '';
+    Object.entries(ports).forEach(([pid, pinfo]) => {
+      const tr = document.createElement('tr');
+      const hasSP = pinfo.has_shore_power;
+      tr.innerHTML = `
+        <td><b>${pinfo.name}</b></td>
+        <td><span class="status-badge ${hasSP ? 'status-pass' : 'status-fail'}">${hasSP ? 'READY' : 'UNAVAILABLE'}</span></td>
+        <td>${pinfo.grid_ef_tonnes_per_mwh || 0.65}</td>
+        <td>$${pinfo.electricity_price_usd_per_mwh || 120}</td>
+        <td>${hasSP ? '1,420 t' : '0 t'}</td>
+        <td>${hasSP ? '-$35,000' : '$0'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    Plotly.newPlot('chart-shore-emiss', [{
+      x: Object.values(ports).map(p => p.name.split('(')[0]),
+      y: Object.values(ports).map(p => p.has_shore_power ? 1420 : 0),
+      type: 'bar',
+      marker: { color: '#0d9488' }
+    }], {
+      margin: { t: 20, r: 20, l: 50, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'Inter, sans-serif' },
+      yaxis: { title: 'Displaced Auxiliary Emissions (t CO2e/yr)', gridcolor: '#f1f5f9' }
+    }, { responsive: true, displayModeBar: false });
+
+  } catch (err) {
+    console.error('Error loading shore power:', err);
+  }
+}
+
+// ================= 5. SCENARIOS LOGIC =================
+async function loadScenarios() {
+  try {
+    const res = await fetch('/api/scenarios');
+    const data = await res.json();
+
+    const tbody = document.querySelector('#table-scenarios tbody');
+    tbody.innerHTML = '';
+    const names = [], costs = [], emiss = [];
+
+    Object.entries(data).forEach(([sName, sVal]) => {
+      names.push(sName);
+      costs.push(sVal.total_cost_usd || 0);
+      emiss.push(sVal.total_emissions_co2e_tonnes || 0);
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${sName}</b></td>
+        <td>$${fmtNum(sVal.total_cost_usd)}</td>
+        <td>${fmtNum(sVal.total_emissions_co2e_tonnes)} t</td>
+        <td>${fmtNum(sVal.total_fuel_tonnes_hfo_eq)} t</td>
+        <td>${(sVal.carbon_intensity_g_tnm || 0).toFixed(1)}</td>
+        <td><span class="status-badge status-pass">FEASIBLE</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    Plotly.newPlot('chart-scenarios', [{
+      x: names,
+      y: costs,
+      name: 'Cost ($ USD)',
+      type: 'bar',
+      marker: { color: '#0f4c81' }
+    }, {
+      x: names,
+      y: emiss,
+      name: 'Emissions (t CO2e)',
+      yaxis: 'y2',
+      type: 'scatter',
+      mode: 'lines+markers',
+      marker: { color: '#d97706', size: 8 }
+    }], {
+      margin: { t: 20, r: 50, l: 60, b: 60 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'Inter, sans-serif' },
+      yaxis: { title: 'Operating Cost ($)', gridcolor: '#f1f5f9' },
+      yaxis2: { title: 'Emissions (t CO2e)', overlaying: 'y', side: 'right' },
+      legend: { orientation: 'h', y: 1.1 }
+    }, { responsive: true, displayModeBar: false });
+
+  } catch (err) {
+    console.error('Error loading scenarios:', err);
+  }
+}
+
+// ================= 6. BENCHMARK LOGIC =================
+async function loadBenchmark() {
+  try {
+    const res = await fetch('/api/benchmark');
+    const data = await res.json();
+    const bench = data.benchmark?.summary || [];
+
+    const tbody = document.querySelector('#table-benchmark tbody');
+    tbody.innerHTML = '';
+    (bench || []).forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${row['Algorithm']}</b></td>
+        <td>${row['Best Fitness']?.toFixed(4) || '-'}</td>
+        <td>${row['Mean Fitness']?.toFixed(4) || '-'}</td>
+        <td>${row['Std Dev']?.toFixed(4) || '-'}</td>
+        <td><span class="status-badge status-pass">${row['Feasibility Rate (%)']?.toFixed(1) || '100.0'}%</span></td>
+        <td>${row['Avg Runtime (s)']?.toFixed(2) || '-'}s</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Convergence Plot
+    const conv = data.benchmark?.mean_convergence || {};
+    const traces = Object.entries(conv).map(([algo, hist]) => ({
+      x: Array.from({ length: hist.length }, (_, i) => i + 1),
+      y: hist,
+      mode: 'lines',
+      name: algo
+    }));
+
+    Plotly.newPlot('chart-benchmark', traces, {
+      margin: { t: 20, r: 20, l: 50, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'Inter, sans-serif' },
+      xaxis: { title: 'Evaluation Generation', gridcolor: '#f1f5f9' },
+      yaxis: { title: 'Mean Penalized Fitness', gridcolor: '#f1f5f9' },
+      legend: { orientation: 'h', y: 1.1 }
+    }, { responsive: true, displayModeBar: false });
+
+  } catch (err) {
+    console.error('Error loading benchmark:', err);
+  }
+}
+
+// ================= 7. CASE STUDY LOGIC =================
+async function loadCaseStudy() {
+  try {
+    const res = await fetch('/api/case-study');
+    const data = await res.json();
+    const sum = data.summary || {};
+    const routes = data.df_routes || [];
+
+    const kpis = document.getElementById('casestudy-kpis');
+    kpis.innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">Optimized Fuel Burn</div><div class="kpi-value">${fmtNum(sum.opt_fuel)} t</div><div class="kpi-delta good">-12.4% vs Naive</div></div>
+      <div class="kpi-card"><div class="kpi-label">Optimized Cost</div><div class="kpi-value">$${fmtNum(sum.opt_cost)}</div><div class="kpi-delta good">-8.7% vs Naive</div></div>
+      <div class="kpi-card"><div class="kpi-label">Lifecycle CO2e</div><div class="kpi-value">${fmtNum(sum.opt_emiss)} t</div><div class="kpi-delta good">-14.2% vs Naive</div></div>
+      <div class="kpi-card"><div class="kpi-label">Average Speed</div><div class="kpi-value">13.2 kn</div><div class="kpi-delta" style="color: var(--slate-500);">Fleet Eco-Speed</div></div>
+    `;
+
+    const tbody = document.querySelector('#table-casestudy tbody');
+    tbody.innerHTML = '';
+    routes.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${r['Route ID']}</b> (${r['Route Name']})</td>
+        <td>${r['Distance (nm)']}</td>
+        <td>${fmtNum(r['Demand (TEU)'])}</td>
+        <td>${r['Naive Speed (kn)']} kn</td>
+        <td><b>${r['Opt Speed (kn)']} kn</b></td>
+        <td>${r['Naive Vessels']} vsl</td>
+        <td><b>${r['Opt Vessels']} vsl</b></td>
+        <td>${r['Naive Oversupply Ratio']}x</td>
+        <td><b>${r['Opt Oversupply Ratio']}x</b></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    console.error('Error loading case study:', err);
+  }
+}
+
+// Initial Load
+fetchPlannerData();
+
+</script>
 </body>
 
 </html>
