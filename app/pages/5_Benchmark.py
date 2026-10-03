@@ -23,6 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.ui.components import render_top_strip
 from app.ui.theme import apply_theme_layout, ALGO_COLORS, UI_COLORS
+from app.ui.css import inject_css
 from app.ui.state import (
     get_or_load_benchmark_results,
     get_or_load_scalability_results,
@@ -39,6 +40,7 @@ render_top_strip(
     title="Algorithmic Optimization Benchmark",
     subtitle="Comparative convergence, solution quality, and scalability across 10 random seeds (20,000 evals/run).",
 )
+inject_css()
 
 cfg = get_default_config()
 
@@ -80,25 +82,41 @@ w_speed_row = df_summary.sort_values(by="Avg Runtime (s)", ascending=True).iloc[
 
 leader_cols = st.columns(4)
 with leader_cols[0]:
-    with st.container(border=True):
-        st.caption("Lowest Best Fitness")
-        st.markdown(f"**{w_fit_row['Algorithm']}**")
-        st.markdown(f"Score: **{w_fit_row['Best Fitness']:.4f}**")
+    st.markdown(
+        f"""<div style="border-top:3px solid #0f4c81; background:#fff; border:1px solid #e2e8f0;
+        border-radius:8px; padding:0.75rem 1rem; box-shadow:0 1px 3px rgba(15,76,129,.08);">
+        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">Lowest Best Fitness</div>
+        <div style="font-size:17px;font-weight:700;color:#1e293b;margin:3px 0;">{w_fit_row['Algorithm']}</div>
+        <div style="font-size:12px;color:#0f4c81;font-weight:600;">{w_fit_row['Best Fitness']:.4f}</div></div>""",
+        unsafe_allow_html=True,
+    )
 with leader_cols[1]:
-    with st.container(border=True):
-        st.caption("Lowest Mean Fitness")
-        st.markdown(f"**{w_mean_row['Algorithm']}**")
-        st.markdown(f"Mean: **{w_mean_row['Mean Fitness']:.4f}**")
+    st.markdown(
+        f"""<div style="border-top:3px solid #2a9d8f; background:#fff; border:1px solid #e2e8f0;
+        border-radius:8px; padding:0.75rem 1rem; box-shadow:0 1px 3px rgba(15,76,129,.08);">
+        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">Lowest Mean Fitness</div>
+        <div style="font-size:17px;font-weight:700;color:#1e293b;margin:3px 0;">{w_mean_row['Algorithm']}</div>
+        <div style="font-size:12px;color:#2a9d8f;font-weight:600;">{w_mean_row['Mean Fitness']:.4f}</div></div>""",
+        unsafe_allow_html=True,
+    )
 with leader_cols[2]:
-    with st.container(border=True):
-        st.caption("Highest Feasibility")
-        st.markdown(f"**{w_feas_row['Algorithm']}**")
-        st.markdown(f"Rate: **{w_feas_row['Feasibility Rate (%)']:.1f}%**")
+    st.markdown(
+        f"""<div style="border-top:3px solid #0f4c81; background:#fff; border:1px solid #e2e8f0;
+        border-radius:8px; padding:0.75rem 1rem; box-shadow:0 1px 3px rgba(15,76,129,.08);">
+        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">Highest Feasibility</div>
+        <div style="font-size:17px;font-weight:700;color:#1e293b;margin:3px 0;">{w_feas_row['Algorithm']}</div>
+        <div style="font-size:12px;color:#0f4c81;font-weight:600;">{w_feas_row['Feasibility Rate (%)']:.1f}%</div></div>""",
+        unsafe_allow_html=True,
+    )
 with leader_cols[3]:
-    with st.container(border=True):
-        st.caption("Fastest Execution")
-        st.markdown(f"**{w_speed_row['Algorithm']}**")
-        st.markdown(f"Runtime: **{w_speed_row['Avg Runtime (s)']:.2f}s**")
+    st.markdown(
+        f"""<div style="border-top:3px solid #2a9d8f; background:#fff; border:1px solid #e2e8f0;
+        border-radius:8px; padding:0.75rem 1rem; box-shadow:0 1px 3px rgba(15,76,129,.08);">
+        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">Fastest Execution</div>
+        <div style="font-size:17px;font-weight:700;color:#1e293b;margin:3px 0;">{w_speed_row['Algorithm']}</div>
+        <div style="font-size:12px;color:#2a9d8f;font-weight:600;">{w_speed_row['Avg Runtime (s)']:.2f}s</div></div>""",
+        unsafe_allow_html=True,
+    )
 
 st.dataframe(
     df_summary,

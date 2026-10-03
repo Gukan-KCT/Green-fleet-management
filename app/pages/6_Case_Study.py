@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.ui.components import render_top_strip, render_kpi_row, render_constraints_table
 from app.ui.theme import apply_theme_layout, UI_COLORS
+from app.ui.css import inject_css
 from app.ui.state import get_or_load_case_study, get_default_config
 from src.analysis.case_study import run_case_study
 from src.optimization.problem import FleetOptimizationProblem
@@ -32,6 +33,8 @@ render_top_strip(
     subtitle="Benchmarking multi-objective optimization against Feasible Naive and Best Conventional references.",
 )
 
+
+inject_css()
 cfg = get_default_config()
 
 # --- 1. Load Precomputed Case Study or Compute ---

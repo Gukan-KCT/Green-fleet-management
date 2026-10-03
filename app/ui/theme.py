@@ -4,8 +4,12 @@ Enforces consistent color semantics across all charts, maps, and metric badges.
 """
 
 from __future__ import annotations
+from pathlib import Path
 from typing import Dict, Any
+import streamlit as st
 import plotly.graph_objects as go
+from app.ui.css import inject_css
+
 
 # --- 1. Semantic Color Tokens ---
 
@@ -70,11 +74,11 @@ def apply_theme_layout(
     """
     fig.update_layout(
         title=dict(
-            text=f"<b>{title}</b>" if title else "",
+            text=f"<b>{title}</b>",
             font=dict(size=14, color=UI_COLORS["text"], family="Inter, system-ui, sans-serif"),
             x=0.0,
             xanchor="left",
-        ),
+        ) if title else None,
         xaxis=dict(
             title=dict(text=xaxis_title, font=dict(size=12, color=UI_COLORS["muted_text"])),
             gridcolor="#f1f5f9",
@@ -91,7 +95,7 @@ def apply_theme_layout(
             linecolor="#cbd5e1",
             tickfont=dict(size=11, color=UI_COLORS["text"]),
         ),
-        margin=dict(l=40, r=20, t=45 if title else 25, b=40),
+        margin=dict(l=40, r=20, t=50 if title else (32 if show_legend else 15), b=40),
         height=height,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -99,7 +103,7 @@ def apply_theme_layout(
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
+            y=1.04,
             xanchor="right",
             x=1.0,
             font=dict(size=11, color=UI_COLORS["text"]),

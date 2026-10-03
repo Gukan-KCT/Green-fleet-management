@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.ui.components import render_top_strip
+from app.ui.css import inject_css
 from app.ui.state import get_default_config
 
 render_top_strip(
@@ -27,6 +28,8 @@ render_top_strip(
     subtitle="Mathematical formulations, naval architecture resistance laws, and algorithmic derivations.",
 )
 
+
+inject_css()
 cfg = get_default_config()
 
 # --- 1. Problem Formulation ---

@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.ui.components import render_top_strip
 from app.ui.theme import apply_theme_layout, get_fuel_color
+from app.ui.css import inject_css
 from app.ui.state import get_default_config
 from src.analysis.fuels import compare_fuels_for_voyage
 
@@ -30,6 +31,8 @@ render_top_strip(
     subtitle="Evaluate volumetric energy density, lifecycle emissions, and cargo slot displacement.",
 )
 
+
+inject_css()
 cfg = get_default_config()
 
 # --- 1. Controls ---
@@ -81,24 +84,21 @@ for i, (_, row) in enumerate(fuels_df.iterrows()):
     f_name = str(row["fuel_type"])
     color = get_fuel_color(f_name)
     with f_cols[i]:
-        with st.container(border=True):
-            st.markdown(f"<span style='color:{color}; font-weight:bold;'>● {f_name}</span>", unsafe_allow_html=True)
-            st.metric(
-                label="Bunker Mass",
-                value=f"{row['fuel_mass_tonnes']:,.1f} t",
-                help="Total required fuel mass accounting for Lower Heating Value (LHV) equivalence.",
-            )
-            st.metric(
-                label="Voyage Cost",
-                value=f"${int(row['fuel_cost_usd']):,}",
-                help="Bunkering procurement expenditure.",
-            )
-            st.metric(
-                label="Lifecycle CO2e",
-                value=f"{int(row['lifecycle_co2e_tonnes']):,} t",
-                help="Well-to-Wake total lifecycle emissions.",
-            )
-            st.caption(f"Cargo penalty: **{row['cargo_loss_pct']:.1f}%**")
+        st.markdown(
+            f"""<div style="border-top:3px solid {color}; background:#fff;
+            border:1px solid #e2e8f0; border-radius:10px; padding:0.85rem 1rem;
+            box-shadow:0 1px 4px rgba(15,76,129,.08);">
+            <div style="color:{color};font-weight:700;font-size:13px;margin-bottom:6px;">● {f_name}</div>
+            <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">Bunker Mass</div>
+            <div style="font-size:19px;font-weight:700;color:#1e293b;">{row['fuel_mass_tonnes']:,.1f} t</div>
+            <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:6px;">Voyage Cost</div>
+            <div style="font-size:16px;font-weight:600;color:#1e293b;">${int(row['fuel_cost_usd']):,}</div>
+            <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:6px;">Lifecycle CO2e</div>
+            <div style="font-size:16px;font-weight:600;color:#1e293b;">{int(row['lifecycle_co2e_tonnes']):,} t</div>
+            <div style="font-size:11px;color:#64748b;margin-top:6px;">Cargo penalty: <b>{row['cargo_loss_pct']:.1f}%</b></div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
 # --- 3. Focused Comparative Charts (2x2 Grid) ---
 c_ch1, c_ch2 = st.columns(2)

@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.ui.components import render_top_strip
 from app.ui.theme import apply_theme_layout, UI_COLORS, FUEL_COLORS, get_fuel_color
+from app.ui.css import inject_css
 from app.ui.state import get_default_config
 from src.analysis.scenarios import (
     PRESET_SCENARIOS,
@@ -34,6 +35,8 @@ render_top_strip(
     subtitle="Simulate market shocks, weather contingencies, and regulatory carbon tax stress tests.",
 )
 
+
+inject_css()
 cfg = get_default_config()
 
 # --- 1. Scenario Selection & Custom Builder ---

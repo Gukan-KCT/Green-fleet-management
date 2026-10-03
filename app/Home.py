@@ -37,8 +37,11 @@ from app.ui.charts import (
     build_pareto_chart,
 )
 from app.ui.state import get_or_load_plan, get_default_config
+from app.ui.css import inject_css
 from src.optimization.pareto import generate_pareto_frontier
 from src.analysis.report import generate_standalone_html_report
+
+inject_css()
 
 # --- 1. Top Strip & Header ---
 render_top_strip(
@@ -215,6 +218,7 @@ with col_alloc:
         st.markdown("**Fleet Allocation by Corridor**")
         st.caption("Distribution of vessels and propulsion technologies per shipping lane.")
         fig_alloc = build_allocation_stacked_bar(df_routes)
+        fig_alloc.layout.title = None
         st.plotly_chart(fig_alloc, width="stretch")
 
 with st.expander("Detailed Route Deployment & Oversupply Metrics Table", expanded=False):

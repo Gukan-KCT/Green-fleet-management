@@ -42,6 +42,45 @@ def get_default_config() -> Dict[str, Any]:
     return st.session_state["config"]
 
 
+def build_routes_dataframe(prob: FleetOptimizationProblem, opt_eval: Dict[str, Any]) -> pd.DataFrame:
+    """Constructs standardized route assignment and oversupply dataframe from problem and eval dict."""
+    rows = []
+    allocs = opt_eval.get("allocations")
+    for r_idx, r_key in enumerate(prob.route_keys):
+        r_cfg = prob.routes[r_key]
+        r_det = opt_eval.get("route_details", {}).get(r_key, {})
+
+        opt_names = []
+        dominant_fuel = "HFO"
+        total_vessels = 0
+        if allocs is not None:
+            for o_idx, opt in enumerate(prob.options):
+                n_v = int(allocs[o_idx, r_idx])
+                if n_v > 0:
+                    opt_names.append(f"{n_v}x {opt['vessel']} ({opt['fuel']})")
+                    dominant_fuel = opt["fuel"]
+                    total_vessels += n_v
+
+        opt_summary = ", ".join(opt_names) if opt_names else f"1x Handymax ({dominant_fuel})"
+        rows.append({
+            "Route ID": r_key,
+            "Name": r_cfg["name"],
+            "Origin": r_cfg["origin"],
+            "Destination": r_cfg["destination"],
+            "Vessels": max(1, total_vessels),
+            "Fuel": dominant_fuel,
+            "Option": opt_summary,
+            "Speed (knots)": round(r_det.get("speed_knots", 14.0), 1),
+            "Capacity (TEU/yr)": int(round(r_det.get("route_cargo_cap", 0))),
+            "Demand (TEU/yr)": int(round(r_det.get("annual_demand_teu", 1))),
+            "Oversupply Ratio": round(r_det.get("oversupply_ratio", 1.0), 2),
+            "Reliability (%)": round(r_det.get("reliability", 95.0), 1),
+            "Sailings/Wk": round(r_det.get("sailings_per_week", 1.0), 2),
+            "Distance (nm)": r_cfg["distance_nm"],
+        })
+    return pd.DataFrame(rows)
+
+
 def get_or_load_plan(
     weights: tuple = (0.2, 0.4, 0.4),
     allowed_fuels: Optional[list] = None,
@@ -72,14 +111,17 @@ def get_or_load_plan(
     if not force_recompute and is_default:
         saved_case = load_saved_pickle("saved_case_study.pkl")
         if saved_case is not None:
+            prob = FleetOptimizationProblem()
+            opt_eval = saved_case["optimized_eval"]
+            df_routes = build_routes_dataframe(prob, opt_eval)
             plan_res = {
-                "problem": FleetOptimizationProblem(),
-                "optimized_eval": saved_case["optimized_eval"],
+                "problem": prob,
+                "optimized_eval": opt_eval,
                 "naive_eval": saved_case["naive_eval"],
                 "best_conv_eval": saved_case["best_conv_eval"],
-                "df_routes": saved_case["df_routes"],
-                "convergence": saved_case["convergence"],
-                "best_bits": saved_case["best_bits"],
+                "df_routes": df_routes,
+                "convergence": saved_case.get("convergence", saved_case.get("convergence_curve", [])),
+                "best_bits": saved_case.get("best_bits", saved_case.get("optimized_bits", [])),
             }
             st.session_state[state_key] = plan_res
             return plan_res
@@ -118,42 +160,7 @@ def get_or_load_plan(
     )
     res = qiea.optimize(prob.fitness_function, seed_bits=best_conv_bits)
     opt_eval = prob.evaluate(res["best_bits"])
-
-    rows = []
-    allocs = opt_eval.get("allocations")
-    for r_idx, r_key in enumerate(prob.route_keys):
-        r_cfg = prob.routes[r_key]
-        r_det = opt_eval["route_details"][r_key]
-
-        opt_names = []
-        dominant_fuel = "HFO"
-        total_vessels = 0
-        if allocs is not None:
-            for o_idx, opt in enumerate(prob.options):
-                n_v = int(allocs[o_idx, r_idx])
-                if n_v > 0:
-                    opt_names.append(f"{n_v}x {opt['vessel']} ({opt['fuel']})")
-                    dominant_fuel = opt["fuel"]
-                    total_vessels += n_v
-
-        opt_summary = ", ".join(opt_names) if opt_names else f"1x Handymax ({dominant_fuel})"
-        rows.append({
-            "Route ID": r_key,
-            "Name": r_cfg["name"],
-            "Origin": r_cfg["origin"],
-            "Destination": r_cfg["destination"],
-            "Vessels": max(1, total_vessels),
-            "Fuel": dominant_fuel,
-            "Option": opt_summary,
-            "Speed (knots)": round(r_det.get("speed_knots", 14.0), 1),
-            "Capacity (TEU/yr)": int(round(r_det.get("route_cargo_cap", 0))),
-            "Demand (TEU/yr)": int(round(r_det.get("annual_demand_teu", 1))),
-            "Oversupply Ratio": round(r_det.get("oversupply_ratio", 1.0), 2),
-            "Reliability (%)": round(r_det.get("reliability", 95.0), 1),
-            "Sailings/Wk": round(r_det.get("sailings_per_week", 1.0), 2),
-            "Distance (nm)": r_cfg["distance_nm"],
-        })
-    df_routes = pd.DataFrame(rows)
+    df_routes = build_routes_dataframe(prob, opt_eval)
 
     plan_res = {
         "problem": prob,

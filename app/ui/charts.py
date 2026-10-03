@@ -123,38 +123,52 @@ def build_network_map(df_routes: pd.DataFrame, ports_config: Dict[str, Any]) -> 
 
 def build_allocation_stacked_bar(df_routes: pd.DataFrame) -> go.Figure:
     """
-    Renders stacked bar of vessels deployed per corridor, colored by vessel/fuel option.
+    Renders stacked bar of vessels deployed per corridor, colored by fuel type.
     """
     fig = go.Figure()
 
     if df_routes.empty:
         return fig
 
-    # Group by Route and Option
-    options = df_routes["Option"].unique()
-    for opt in options:
-        sub = df_routes[df_routes["Option"] == opt]
-        fuel = sub["Fuel"].iloc[0] if not sub.empty else "HFO"
-        color = get_fuel_color(fuel)
+    # Group by Fuel type for clean semantic color coding and compact legend
+    fuels = df_routes["Fuel"].unique()
+    for fuel in fuels:
+        sub = df_routes[df_routes["Fuel"] == fuel]
+        color = get_fuel_color(str(fuel))
+
+        hover_lines = []
+        for _, row in sub.iterrows():
+            r_name = row.get("Name", row["Route ID"])
+            hover_lines.append(
+                f"<b>{row['Route ID']}</b> ({r_name})<br>"
+                f"Fleet: <b>{row['Vessels']} vessels</b><br>"
+                f"Fuel: <b>{fuel}</b><br>"
+                f"Allocation: {row.get('Option', '')}<br>"
+                f"Speed: {row.get('Speed (knots)', 14.0)} kn<br>"
+                f"Reliability: {row.get('Reliability (%)', 95.0)}%"
+            )
 
         fig.add_trace(
             go.Bar(
                 x=sub["Route ID"],
                 y=sub["Vessels"],
-                name=opt,
+                name=str(fuel),
                 marker_color=color,
-                hovertemplate="Route %{x}: %{y} vessels (%{data.name})<extra></extra>",
+                text=sub["Vessels"].apply(lambda v: f"{v} vsl"),
+                textposition="auto",
+                hoverinfo="text",
+                hovertext=hover_lines,
             )
         )
 
     fig.update_layout(barmode="stack")
     apply_theme_layout(
         fig,
-        title="Fleet Allocation by Route Corridor",
+        title=None,
         xaxis_title="Shipping Corridor",
         yaxis_title="Vessels Assigned (Count)",
-        height=370,
-        show_legend=True,
+        height=320,
+        show_legend=len(fuels) > 1,
     )
     return fig
 

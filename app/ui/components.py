@@ -27,13 +27,25 @@ def render_top_strip(
     with col_disc:
         st.markdown(
             """
-            <div style="background-color: #f1f5f9; border-left: 3px solid #0f4c81; padding: 4px 10px; border-radius: 4px; font-size: 11px; color: #475569; margin-top: 5px;">
-                <b>Synthetic Data:</b> Illustrative prototype data. Not for real operations.
-                <b>Quantum-Inspired:</b> Classical CPU algorithm, no quantum hardware claimed.
+            <div style="
+                display:flex; gap:6px; align-items:center; flex-wrap:wrap;
+                margin-top:8px; justify-content:flex-end;
+            ">
+              <span style="
+                background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.35);
+                color:#92400e; font-size:10.5px; font-weight:600; padding:2px 8px;
+                border-radius:20px; letter-spacing:.04em; text-transform:uppercase;
+              ">&#9670; Synthetic Data</span>
+              <span style="
+                background:rgba(15,76,129,.08); border:1px solid rgba(15,76,129,.2);
+                color:#0f4c81; font-size:10.5px; font-weight:600; padding:2px 8px;
+                border-radius:20px; letter-spacing:.04em; text-transform:uppercase;
+              ">&#9632; Classical CPU</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
+
 
 
 def compute_signed_delta(opt_val: float, base_val: float) -> str:

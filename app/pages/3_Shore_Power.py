@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.ui.components import render_top_strip
 from app.ui.theme import apply_theme_layout, UI_COLORS
+from app.ui.css import inject_css
 from app.ui.state import get_default_config, get_or_load_plan
 from src.analysis.shore_power import analyze_shore_power_fleet
 
@@ -29,6 +30,7 @@ render_top_strip(
     title="Port Shore Power (Cold Ironing)",
     subtitle="Assess auxiliary generator fuel displacement against municipal electric grid carbon factors.",
 )
+inject_css()
 
 cfg = get_default_config()
 plan = get_or_load_plan()

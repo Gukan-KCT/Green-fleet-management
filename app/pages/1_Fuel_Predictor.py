@@ -23,6 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.ui.components import render_top_strip
 from app.ui.theme import apply_theme_layout, UI_COLORS
+from app.ui.css import inject_css
 from app.ui.state import get_or_load_prediction_results, get_default_config
 from src.models.physics import (
     calculate_leg_fuel_conventional,
@@ -34,6 +35,8 @@ render_top_strip(
     subtitle="Estimate single-voyage bunker burn and compare classical baseline vs QIEA-tuned predictors.",
 )
 
+
+inject_css()
 cfg = get_default_config()
 pred_res = get_or_load_prediction_results()
 
