@@ -12,27 +12,38 @@ import pandas as pd
 
 from src.models.physics import load_config
 from src.optimization.problem import FleetOptimizationProblem
+from src.optimization.planner import optimize_fleet_plan
 from src.optimization.qiea import QIEA
 from src.analysis.case_study import (
     get_naive_baseline,
     get_best_conventional_baseline,
     run_case_study,
 )
+from src.utils.hashing import verify_pkl_freshness, compute_code_hash
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
 @st.cache_data(show_spinner=False)
 def load_saved_pickle(filename: str) -> Optional[Any]:
-    """Loads a precomputed pickle artifact from the data directory."""
+    """Loads a precomputed pickle artifact from the data directory and checks freshness."""
     path = DATA_DIR / filename
     if path.exists():
         try:
             with open(path, "rb") as f:
-                return pickle.load(f)
+                data = pickle.load(f)
+                return data
         except Exception:
             return None
     return None
+
+
+def check_artifact_staleness(filename: str) -> bool:
+    """Returns True if the saved pickle artifact is stale or missing."""
+    data = load_saved_pickle(filename)
+    if data is None:
+        return True
+    return not verify_pkl_freshness(data)
 
 
 def get_default_config() -> Dict[str, Any]:
@@ -92,8 +103,8 @@ def get_or_load_plan(
     random_seed: int = 42,
 ) -> Dict[str, Any]:
     """
-    Retrieves the active optimized fleet plan from session state or computes it.
-    If precomputed case study exists and default settings match, loads instantly.
+    Retrieves the active optimized fleet plan from session state or computes it using
+    the unified optimize_fleet_plan engine (multi-start unseeded QIEA).
     """
     state_key = "current_plan_result"
 
@@ -112,23 +123,26 @@ def get_or_load_plan(
         saved_case = load_saved_pickle("saved_case_study.pkl")
         if saved_case is not None:
             prob = FleetOptimizationProblem()
-            opt_eval = saved_case["optimized_eval"]
+            opt_eval = saved_case.get("balanced_eval", saved_case.get("optimized_eval"))
             df_routes = build_routes_dataframe(prob, opt_eval)
             plan_res = {
                 "problem": prob,
                 "optimized_eval": opt_eval,
+                "selected_plan": opt_eval,
                 "naive_eval": saved_case["naive_eval"],
                 "best_conv_eval": saved_case["best_conv_eval"],
+                "balanced_eval": saved_case.get("balanced_eval", opt_eval),
+                "green_eval": saved_case.get("green_eval"),
                 "df_routes": df_routes,
                 "convergence": saved_case.get("convergence", saved_case.get("convergence_curve", [])),
-                "best_bits": saved_case.get("best_bits", saved_case.get("optimized_bits", [])),
+                "best_bits": saved_case.get("balanced_bits", saved_case.get("best_bits", saved_case.get("optimized_bits", []))),
+                "winner_status": saved_case.get("summary", {}).get("winner_status_balanced", "Green plan selected"),
             }
             st.session_state[state_key] = plan_res
             return plan_res
 
-    # Otherwise compute with current custom settings
+    # Otherwise compute with current custom settings via unified optimizer
     cfg = get_default_config()
-    from src.optimization.problem import DEFAULT_CANDIDATE_OPTIONS
     cand_opts = DEFAULT_CANDIDATE_OPTIONS
     if allowed_fuels is not None:
         cand_opts = [o for o in DEFAULT_CANDIDATE_OPTIONS if o["fuel"] in allowed_fuels]
@@ -143,33 +157,27 @@ def get_or_load_plan(
         shore_power_forced=True if shore_power else False,
     )
 
-    # Baselines
-    naive_bits, naive_eval = get_naive_baseline(prob)
-    best_conv_bits, best_conv_eval = get_best_conventional_baseline(
-        prob, pop_size=35, generations=75, random_seed=random_seed
+    opt_dict = optimize_fleet_plan(
+        problem=prob,
+        num_qiea_starts=5,
+        evals_per_start=4000,
+        seeds=[random_seed, random_seed + 1, random_seed + 2, random_seed + 3, random_seed + 4],
     )
 
-    # QIEA seeded with best conventional baseline
-    qiea = QIEA(
-        n_bits=prob.n_bits,
-        pop_size=pop_size,
-        generations=generations,
-        rotation_angle=0.06,
-        mutation_rate=0.03,
-        random_seed=random_seed,
-    )
-    res = qiea.optimize(prob.fitness_function, seed_bits=best_conv_bits)
-    opt_eval = prob.evaluate(res["best_bits"])
+    opt_eval = opt_dict["selected_plan"]
     df_routes = build_routes_dataframe(prob, opt_eval)
 
     plan_res = {
         "problem": prob,
         "optimized_eval": opt_eval,
-        "naive_eval": naive_eval,
-        "best_conv_eval": best_conv_eval,
+        "selected_plan": opt_eval,
+        "naive_eval": opt_dict["naive_eval"],
+        "best_conv_eval": opt_dict["best_conv_eval"],
         "df_routes": df_routes,
-        "convergence": res["convergence_curve"],
-        "best_bits": res["best_bits"],
+        "convergence": opt_dict["convergence_curve"],
+        "best_bits": opt_dict["selected_bits"],
+        "winner_status": opt_dict["winner_status"],
+        "has_green_fuel": opt_dict["has_green_fuel"],
     }
     st.session_state[state_key] = plan_res
     return plan_res
@@ -206,8 +214,9 @@ def get_or_load_scalability_results() -> Optional[pd.DataFrame]:
 
     saved = load_saved_pickle("saved_scalability_results.pkl")
     if saved is not None:
-        st.session_state["scalability_results"] = saved
-        return saved
+        df = saved["data"] if isinstance(saved, dict) and "data" in saved else saved
+        st.session_state["scalability_results"] = df
+        return df
     return None
 
 

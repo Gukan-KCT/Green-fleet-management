@@ -188,6 +188,20 @@ with c_dl:
         width="stretch",
     )
 
+# Staleness Notice Check
+from app.ui.state import check_artifact_staleness
+if check_artifact_staleness("saved_case_study.pkl"):
+    st.warning("Saved results are out of date, press Re-run to update.", icon="⚠️")
+
+# Plan Selection Status
+winner_status = plan.get("winner_status", "Green plan selected")
+if "Green plan selected" in winner_status:
+    st.success(f"**{winner_status}**: Multi-objective QIEA search identified a decarbonized fleet configuration dominating conventional operations.", icon="🌱")
+elif "Conventional plan retained" in winner_status:
+    st.info(f"**{winner_status}**.", icon="ℹ️")
+else:
+    st.info(f"**{winner_status}**.", icon="⚓")
+
 # --- 4. Row 1: KPI Cards with Comparator Toggle ---
 c_comp, _ = st.columns([3, 7])
 with c_comp:

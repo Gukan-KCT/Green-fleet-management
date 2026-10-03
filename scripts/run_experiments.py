@@ -32,6 +32,9 @@ from src.analysis.fuels import compare_fuels_for_voyage
 from src.analysis.shore_power import analyze_shore_power_fleet
 
 
+from src.utils.hashing import compute_code_hash
+
+
 def main():
     print("=" * 70)
     print("STARTING COMPLETE REPRODUCIBLE EXPERIMENT SUITE & PRECOMPUTATION")
@@ -39,6 +42,8 @@ def main():
     t_start = time.time()
     data_dir = PROJECT_ROOT / "data"
     data_dir.mkdir(exist_ok=True)
+    code_hash = compute_code_hash()
+    print(f"Current Code & Config Hash: {code_hash}")
 
     # 1. Prediction Benchmark (Repeated 10-fold CV, two-sided Wilcoxon)
     print("\n[1/5] Running Fuel Prediction Benchmark & Wilcoxon Significance Tests...")
@@ -49,12 +54,13 @@ def main():
         qiea_generations=20,
         random_seed=42,
     )
+    pred_res["code_hash"] = code_hash
     with open(data_dir / "saved_prediction_results.pkl", "wb") as f:
         pickle.dump(pred_res, f)
     print(f"  Completed & saved Prediction Benchmark ({time.time() - t0:.2f}s).")
 
     # 2. Algorithmic Optimization Benchmark (Medium Case Study, 10 seeds, 20,000 evals)
-    print("\n[2/5] Running Optimization Benchmark (10 seeds, 20,000 evals per algorithm)...")
+    print("\n[2/5] Running Optimization Benchmark (10 seeds, 20,000 evals per algorithm across 5 algorithms)...")
     t0 = time.time()
     prob_med = FleetOptimizationProblem()
     bench_res = run_benchmark_suite(
@@ -63,6 +69,7 @@ def main():
         pop_size=50,
         generations=400,  # 20,000 evaluations
     )
+    bench_res["code_hash"] = code_hash
     with open(data_dir / "saved_benchmark_results.pkl", "wb") as f:
         pickle.dump(bench_res, f)
     print(f"  Completed & saved Optimization Benchmark ({time.time() - t0:.2f}s).")
@@ -73,26 +80,30 @@ def main():
     scale_df = run_scalability_analysis(
         seeds=DEFAULT_BENCHMARK_SEEDS,
     )
+    scale_pkg = {"data": scale_df, "code_hash": code_hash}
     with open(data_dir / "saved_scalability_results.pkl", "wb") as f:
-        pickle.dump(scale_df, f)
+        pickle.dump(scale_pkg, f)
     print(f"  Completed & saved Scalability Benchmark ({time.time() - t0:.2f}s).")
 
-    # 4. Regional Feeder Case Study (Naive Baseline vs Best Conventional vs Optimized)
-    print("\n[4/5] Running Regional Feeder Decarbonization Case Study...")
+    # 4. Regional Feeder Case Study (Naive Baseline vs Best Conventional vs Balanced vs Green)
+    print("\n[4/5] Running Regional Feeder Decarbonization Case Study across 4 Plans...")
     t0 = time.time()
-    case_res = run_case_study(pop_size=50, generations=200, random_seed=42)
+    case_res = run_case_study(pop_size=40, generations=100, random_seed=42)
+    case_res["code_hash"] = code_hash
     with open(data_dir / "saved_case_study.pkl", "wb") as f:
         pickle.dump(case_res, f)
     print(f"  Completed & saved Case Study ({time.time() - t0:.2f}s).")
 
     # 5. Techno-Economic Analyses (Fuels and Shore Power)
     print("\n[5/5] Running Techno-Economic Analyses (Alternative Fuels & Shore Power)...")
-    shore_res = analyze_shore_power_fleet(case_res["optimized_eval"])
+    shore_res = analyze_shore_power_fleet(case_res["balanced_eval"])
+    shore_res["code_hash"] = code_hash
     with open(data_dir / "saved_shore_power.pkl", "wb") as f:
         pickle.dump(shore_res, f)
     fuels_df = compare_fuels_for_voyage()
+    fuels_pkg = {"data": fuels_df, "code_hash": code_hash}
     with open(data_dir / "saved_fuels_analysis.pkl", "wb") as f:
-        pickle.dump(fuels_df, f)
+        pickle.dump(fuels_pkg, f)
     print("  Completed & saved Techno-Economic Analyses.")
 
     # 6. Generate docs/EXPERIMENTAL_RESULTS.md purely from computed data
@@ -108,6 +119,7 @@ def main():
         shore_res=shore_res,
         fuels_df=fuels_df,
         total_runtime=total_runtime,
+        code_hash=code_hash,
     )
 
     with open(docs_path, "w", encoding="utf-8") as f:
@@ -124,25 +136,27 @@ def generate_markdown_report(
     shore_res: dict,
     fuels_df: pd.DataFrame,
     total_runtime: float,
+    code_hash: str,
 ) -> str:
     """Format experimental results into clean GitHub-flavored markdown with no hardcoded numbers."""
     summary = case_res["summary"]
     naive = summary["naive"]
     best_conv = summary["best_conventional"]
-    opt = summary["optimized"]
-    vs_naive = summary["vs_naive"]
-    vs_conv = summary["vs_best_conventional"]
+    balanced = summary["balanced"]
+    green = summary["green"]
 
     pred_metrics = pred_res["metrics"]
     pred_sig = pred_res["significance_tests"]
     bench_summary = bench_res["summary"]
     sp_summary = shore_res["summary"]["net_benefit"]
+    c_ref = summary.get("carbon_price_reference_usd", 80.0)
 
     md = f"""# Experimental Results & Benchmarking Dossier
 
 > **DISCLAIMER:** All figures, operational costs, fuel consumptions, and lifecycle emissions in this dossier are derived from **strictly synthetic models** formulated for the Phase-1 prototype demonstration. No proprietary vessel telemetry or real commercial operations were utilized.
 
 **Execution Status:** Full Reproducible Batch Run Completed  
+**Code & Config Hash:** `{code_hash}`  
 **Total Benchmark Runtime:** {total_runtime:.2f} seconds  
 **Hardware Profile:** Local Classical CPU (No Quantum Hardware, No Qiskit, No Emulators)  
 **Cross-Validation:** Repeated 10-Fold CV (20 Paired Folds) with Two-Sided Wilcoxon Signed-Rank Test  
@@ -175,7 +189,7 @@ Models were trained and evaluated on 6,500 synthetic voyage records (80/20 train
 
 ## 2. Algorithmic Optimization Benchmark (Medium Network, L = {bench_res['n_bits']} Bits)
 
-Benchmarking of 4 algorithms on the 5-route feeder network problem ($L = {bench_res['n_bits']}$ decision bits) over {len(bench_res['eval_seeds'])} independent seeds with identical evaluation budgets ({bench_res['pop_size'] * bench_res['generations']:,} evaluations per run).
+Benchmarking of 5 optimization algorithms on the 5-route feeder network problem ($L = {bench_res['n_bits']}$ decision bits) over {len(bench_res['eval_seeds'])} independent seeds with identical evaluation budgets ({bench_res['pop_size'] * bench_res['generations']:,} evaluations per run).
 
 ### 2.1 Solution Quality and Convergence Summary
 
@@ -193,33 +207,33 @@ Evaluated across Small ($L=39$ bits), Medium ($L=101$ bits), and Large ($L=462$ 
 
 {scale_df.to_markdown(index=False)}
 
-> **Scalability Root Cause Analysis:** In the 24-route synthetic network, cumulative feeder demand reaches ~1.5M TEU. When an operator fleet is restricted to only 24 vessels (1 vessel per corridor), servicing 24 routes with minimum weekly frequency (1.0-1.5 sailings/wk) is physically impossible. Scaling fleet availability proportionally (120 vessels across 4 vessel classes) and ensuring bunkering connectivity resolves the structural bottleneck, rendering the large-scale network solvable.
-
 ---
 
-## 4. Regional Feeder Case Study Results
+## 4. Regional Feeder Case Study Results (Four Plan Comparison)
 
-The optimized green fleet plan is compared against **two distinct feasible references**:
-1. **Feasible Naive Baseline:** Conventional HFO, fixed service speed, no shore power, adjusted until all constraints are met.
-2. **Best Conventional Baseline:** The same optimizer restricted exclusively to conventional HFO options and no shore power.
+The South Asian feeder network is evaluated across **four distinct fleet deployment strategies**:
+1. **Feasible Naive Baseline:** Conventional HFO, fixed service speed, no shore power.
+2. **Best Conventional Baseline:** Optimizer restricted exclusively to conventional HFO options and no shore power.
+3. **Balanced Multi-Objective Optimized Plan:** Multi-objective QIEA with equal weight on cost and emissions (0.2 fuel / 0.4 cost / 0.4 emissions).
+4. **Green Multi-Objective Optimized Plan:** Multi-objective QIEA with emission-focused weights (0.1 fuel / 0.1 cost / 0.8 emissions).
 
-### 4.1 Comparative Performance Summary
+### 4.1 Four-Plan Comparative Performance Matrix
 
-| Metric | Feasible Naive Baseline | Best Conventional Baseline | Multi-Objective Optimized Plan | Delta vs Naive | Delta vs Best Conv |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Total Fuel (t HFO-eq)** | {naive['fuel_t']:,} | {best_conv['fuel_t']:,} | {opt['fuel_t']:,} | {vs_naive['fuel_label']} | {vs_conv['fuel_label']} |
-| **Operating Cost (USD)** | ${naive['cost_usd']:,} | ${best_conv['cost_usd']:,} | ${opt['cost_usd']:,} | {vs_naive['cost_label']} | {vs_conv['cost_label']} |
-| **Lifecycle GHG (t CO2e)** | {naive['emissions_t']:,} | {best_conv['emissions_t']:,} | {opt['emissions_t']:,} | {vs_naive['emissions_label']} | {vs_conv['emissions_label']} |
-| **Carbon Intensity (g/t-nm)** | {naive['ci_g_tnm']} | {best_conv['ci_g_tnm']} | {opt['ci_g_tnm']} | {vs_naive['ci_label']} | {vs_conv['ci_label']} |
-| **Constraint Feasibility** | {'Feasible (100%)' if naive['feasible'] else 'Infeasible'} | {'Feasible (100%)' if best_conv['feasible'] else 'Infeasible'} | {'Feasible (100%)' if opt['feasible'] else 'Infeasible'} | Strictly Valid | Strictly Valid |
+| Metric | Feasible Naive | Best Conventional | Balanced Optimized | Green Optimized |
+| :--- | :---: | :---: | :---: | :---: |
+| **Total Fuel (t HFO-eq)** | {naive['fuel_t']:,} | {best_conv['fuel_t']:,} | {balanced['fuel_t']:,} | {green['fuel_t']:,} |
+| **Operating Cost (USD)** | ${naive['cost_usd']:,} | ${best_conv['cost_usd']:,} | ${balanced['cost_usd']:,} | ${green['cost_usd']:,} |
+| **Lifecycle GHG (t CO2e)** | {naive['emissions_t']:,} | {best_conv['emissions_t']:,} | {balanced['emissions_t']:,} | {green['emissions_t']:,} |
+| **Carbon Intensity (g/t-nm)** | {naive['ci_g_tnm']} | {best_conv['ci_g_tnm']} | {balanced['ci_g_tnm']} | {green['ci_g_tnm']} |
+| **Cost Delta vs Best Conv** | {naive['cost_label']} | Reference ($0) | {balanced['cost_label']} | {green['cost_label']} |
+| **CO2e Delta vs Best Conv** | {naive['emissions_label']} | Reference (0 t) | {balanced['emissions_label']} | {green['emissions_label']} |
+| **CO2e Avoided vs Best Conv** | 0.0 t | Reference (0 t) | {balanced['emissions_avoided_t']:,} t | {green['emissions_avoided_t']:,} t |
+| **Abatement Cost ($/tCO2e avoided)** | N/A | Reference | {f"${balanced['abatement_cost_usd_per_t']:.1f}/t" if balanced['abatement_cost_usd_per_t'] is not None else "N/A (Cost Saving)"} | {f"${green['abatement_cost_usd_per_t']:.1f}/t" if green['abatement_cost_usd_per_t'] is not None else "N/A"} |
+| **Constraint Feasibility** | {'Feasible (100%)' if naive['feasible'] else 'Infeasible'} | {'Feasible (100%)' if best_conv['feasible'] else 'Infeasible'} | {'Feasible (100%)' if balanced['feasible'] else 'Infeasible'} | {'Feasible (100%)' if green['feasible'] else 'Infeasible'} |
 
-### 4.2 Operating Cost Delta & Decarbonization Trade-offs
-- **Operating Cost Delta vs Naive:** {vs_naive['cost_label']}
-- **Operating Cost Delta vs Best Conventional:** {vs_conv['cost_label']}
-- **Lifecycle Emissions Delta vs Naive:** {vs_naive['emissions_label']}
-- **Lifecycle Emissions Delta vs Best Conventional:** {vs_conv['emissions_label']}
+*Illustrative Carbon Price Reference:* **${c_ref:.0f} / tCO2e**
 
-### 4.3 Shore Power (Cold Ironing) Network Benefits
+### 4.2 Shore Power (Cold Ironing) Network Benefits
 - **Port Fuel Avoided:** {sp_summary['fuel_saved_tonnes']:,} tonnes MGO ({sp_summary['fuel_reduction_pct']}%)
 - **Port CO2e Avoided:** {sp_summary['co2_avoided_tonnes']:,} tonnes CO2e ({sp_summary['co2_reduction_pct']}%)
 - **Net Port Cost Delta:** ${sp_summary['cost_savings_usd']:,}
@@ -232,3 +246,4 @@ The optimized green fleet plan is compared against **two distinct feasible refer
 
 if __name__ == "__main__":
     main()
+

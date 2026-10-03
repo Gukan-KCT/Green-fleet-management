@@ -24,7 +24,12 @@ import pandas as pd
 
 from src.optimization.problem import FleetOptimizationProblem, DEFAULT_CANDIDATE_OPTIONS
 from src.optimization.qiea import QIEA
-from src.optimization.baselines import BinaryGeneticAlgorithm, ParticleSwarmOptimization, RandomSearch
+from src.optimization.baselines import (
+    BinaryGeneticAlgorithm,
+    ParticleSwarmOptimization,
+    RandomSearch,
+    HillClimbSearch,
+)
 from src.models.physics import load_config
 
 DEFAULT_BENCHMARK_SEEDS = [42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
@@ -102,7 +107,7 @@ def run_benchmark_suite(
 
     alg_factories = {
         "Genetic Algorithm (GA)": lambda s: BinaryGeneticAlgorithm(
-            n_bits=n_bits, pop_size=pop_size, generations=generations, random_seed=s
+            n_bits=n_bits, pop_size=pop_size, generations=generations, random_seed=s, use_memetic=True
         ),
         "QIEA (Quantum-Inspired)": lambda s: QIEA(
             n_bits=n_bits,
@@ -110,9 +115,16 @@ def run_benchmark_suite(
             generations=generations,
             random_seed=s,
             initial_theta=problem.get_initial_q_angles(),
+            use_memetic=True,
         ),
         "Particle Swarm (PSO)": lambda s: ParticleSwarmOptimization(
             n_bits=n_bits, swarm_size=pop_size, generations=generations, random_seed=s
+        ),
+        "Hill-Climb Search": lambda s: HillClimbSearch(
+            n_bits=n_bits,
+            evaluations_per_generation=pop_size,
+            generations=generations,
+            random_seed=s,
         ),
         "Random Search": lambda s: RandomSearch(
             n_bits=n_bits,
@@ -232,6 +244,11 @@ def generate_benchmark_narrative(df_summary: pd.DataFrame) -> str:
             narrative_paragraphs.append(
                 f"- **{alg}**: Mean fitness = {fit:.4f}, Feasibility = {feas:.1f}%. "
                 f"With dynamic inertia weight decay (0.9 -> 0.4) and velocity clipping, binary PSO explores discrete hyperplanes."
+            )
+        elif "Hill-Climb" in alg:
+            narrative_paragraphs.append(
+                f"- **{alg}**: Mean fitness = {fit:.4f}, Feasibility = {feas:.1f}%, Runtime = {rt:.2f}s ({ev:,} evals). "
+                f"Multi-start 1-bit-flip neighborhood search greedily climbs local gradients with random perturbation restarts."
             )
         elif "Random" in alg:
             narrative_paragraphs.append(

@@ -70,6 +70,8 @@ def load_pkl(name: str) -> Optional[Any]:
             return None
     return None
 
+from src.optimization.planner import optimize_fleet_plan
+
 def build_routes_df(prob: FleetOptimizationProblem, opt_eval: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = []
     allocs = opt_eval.get("allocations")
@@ -78,7 +80,7 @@ def build_routes_df(prob: FleetOptimizationProblem, opt_eval: Dict[str, Any]) ->
         r_det = opt_eval.get("route_details", {}).get(r_key, {})
 
         opt_names = []
-        dominant_fuel = "HFO"
+        dominant_fuel = None
         total_vessels = 0
         if allocs is not None:
             for o_idx, opt in enumerate(prob.options):
@@ -88,21 +90,27 @@ def build_routes_df(prob: FleetOptimizationProblem, opt_eval: Dict[str, Any]) ->
                     dominant_fuel = opt["fuel"]
                     total_vessels += n_v
 
-        opt_summary = ", ".join(opt_names) if opt_names else f"1x Handymax ({dominant_fuel})"
+        opt_summary = ", ".join(opt_names) if opt_names else "No vessels assigned"
+        dominant_fuel = dominant_fuel if dominant_fuel else "None"
+
+        # Reliability in 0-100 range
+        raw_rel = r_det.get("reliability")
+        rel_pct = round(raw_rel * 100.0, 1) if raw_rel is not None else None
+
         rows.append({
             "Route ID": r_key,
             "Name": r_cfg["name"],
             "Origin": r_cfg["origin"],
             "Destination": r_cfg["destination"],
-            "Vessels": max(1, total_vessels),
+            "Vessels": total_vessels,
             "Fuel": dominant_fuel,
             "Option": opt_summary,
-            "Speed (knots)": round(r_det.get("speed_knots", 14.0), 1),
-            "Capacity (TEU/yr)": int(round(r_det.get("route_cargo_cap", 0))),
+            "Speed (knots)": round(r_det.get("speed_knots", 14.0), 1) if r_det.get("speed_knots") is not None else None,
+            "Capacity (TEU/yr)": int(round(r_det.get("route_cargo_cap", 0))) if r_det.get("route_cargo_cap") is not None else 0,
             "Demand (TEU/yr)": int(round(r_det.get("annual_demand_teu", 1))),
-            "Oversupply Ratio": round(r_det.get("oversupply_ratio", 1.0), 2),
-            "Reliability (%)": round(r_det.get("reliability", 95.0), 1),
-            "Sailings/Wk": round(r_det.get("sailings_per_week", 1.0), 2),
+            "Oversupply Ratio": round(r_det.get("oversupply_ratio", 0.0), 2) if r_det.get("oversupply_ratio") is not None else 0.0,
+            "Reliability (%)": rel_pct,
+            "Sailings/Wk": round(r_det.get("sailings_per_week", 0.0), 2) if r_det.get("sailings_per_week") is not None else 0.0,
             "Distance (nm)": r_cfg["distance_nm"],
         })
     return rows
@@ -123,7 +131,7 @@ def get_plan(
     shore_power: bool = Query(True),
     force_recompute: bool = Query(False),
 ):
-    """Calculates or retrieves precomputed multi-objective fleet optimization plan."""
+    """Calculates or retrieves precomputed multi-objective fleet optimization plan via unified optimize_fleet_plan."""
     # Normalize weights
     total_w = w_fuel + w_cost + w_emiss
     if total_w > 0:
@@ -144,16 +152,15 @@ def get_plan(
         saved = load_pkl("saved_case_study.pkl")
         if saved:
             prob = FleetOptimizationProblem()
-            opt_eval = saved["optimized_eval"]
+            opt_eval = saved.get("balanced_eval", saved.get("optimized_eval"))
             routes = build_routes_df(prob, opt_eval)
-            cfg = prob.config if hasattr(prob, 'config') else load_config()
             return clean_json({
                 "optimized_eval": opt_eval,
                 "naive_eval": saved["naive_eval"],
                 "best_conv_eval": saved["best_conv_eval"],
                 "df_routes": routes,
-                "ports": cfg.get("ports", {}),
-                "convergence": saved.get("convergence_curve", []),
+                "winner_status": saved.get("summary", {}).get("winner_status_balanced", "Green plan selected"),
+                "convergence": saved.get("convergence", saved.get("convergence_curve", [])),
                 "is_precomputed": True,
             })
 
@@ -164,20 +171,23 @@ def get_plan(
         speed_cap_delta=speed_cap - 18.0,
         shore_power_forced=shore_power,
     )
-    naive_bits, naive_eval = get_naive_baseline(prob)
-    best_conv_bits, best_conv_eval = get_best_conventional_baseline(prob, pop_size=25, generations=50)
-    qiea = QIEA(n_bits=prob.n_bits, pop_size=30, generations=60, random_seed=42)
-    res = qiea.optimize(prob.fitness_function, seed_bits=best_conv_bits)
-    opt_eval = prob.evaluate(res["best_bits"])
+
+    opt_res = optimize_fleet_plan(
+        problem=prob,
+        num_qiea_starts=5,
+        evals_per_start=4000,
+        seeds=[42, 43, 44, 45, 46],
+    )
+    opt_eval = opt_res["selected_plan"]
     routes = build_routes_df(prob, opt_eval)
 
     return clean_json({
         "optimized_eval": opt_eval,
-        "naive_eval": naive_eval,
-        "best_conv_eval": best_conv_eval,
+        "naive_eval": opt_res["naive_eval"],
+        "best_conv_eval": opt_res["best_conv_eval"],
         "df_routes": routes,
-        "ports": cfg.get("ports", {}),
-        "convergence": res["convergence_curve"],
+        "winner_status": opt_res["winner_status"],
+        "convergence": opt_res["convergence_curve"],
         "is_precomputed": False,
     })
 

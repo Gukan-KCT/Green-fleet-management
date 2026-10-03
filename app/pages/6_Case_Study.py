@@ -38,15 +38,19 @@ inject_css()
 cfg = get_default_config()
 
 # --- 1. Load Precomputed Case Study or Compute ---
+from app.ui.state import check_artifact_staleness
+if check_artifact_staleness("saved_case_study.pkl"):
+    st.warning("Saved case study results are out of date, press Re-run to update.", icon="⚠️")
+
 c_stat, c_dl = st.columns([13, 7])
 with c_stat:
-    st.caption("Case study evaluates a 5-route South Asian feeder network connecting Mumbai, Kochi, Tuticorin, Chennai, Colombo, and Singapore.")
+    st.caption("Case study evaluates a 5-route South Asian feeder network connecting Mumbai, Kochi, Tuticorin, Chennai, Colombo, and Singapore across 4 fleet deployment strategies.")
 
 case_data = get_or_load_case_study()
 
 if case_data is None:
-    with st.spinner("Computing regional feeder case study simulation..."):
-        case_data = run_case_study(pop_size=40, generations=150, random_seed=42)
+    with st.spinner("Computing regional feeder case study simulation across 4 plans..."):
+        case_data = run_case_study(pop_size=40, generations=100, random_seed=42)
         st.session_state["case_study_results"] = case_data
 
 summary = case_data["summary"]
@@ -54,45 +58,69 @@ df_routes = case_data["df_routes"]
 df_monthly = case_data["df_monthly"]
 naive_eval = case_data["naive_eval"]
 best_conv_eval = case_data["best_conv_eval"]
-opt_eval = case_data["optimized_eval"]
+balanced_eval = case_data.get("balanced_eval", case_data["optimized_eval"])
+green_eval = case_data.get("green_eval", balanced_eval)
 problem = case_data.get("problem") or FleetOptimizationProblem(config=cfg)
 
-# Download Buttons
-with c_dl:
-    col_d1, col_d2 = st.columns(2)
-    with col_d1:
-        html_report = generate_html_report(case_data)
-        st.download_button(
-            label="Download HTML Report",
-            data=html_report,
-            file_name="green_fleet_case_study_dossier.html",
-            mime="text/html",
-            width="stretch",
+# --- 2. 4-Plan Comparative Scorecard with Abatement Cost ---
+st.markdown("### Four-Plan Comprehensive Decarbonization Scorecard")
+
+plan_tabs = st.tabs([
+    "Balanced Optimized Plan (0.2/0.4/0.4)",
+    "Green Optimized Plan (0.1/0.1/0.8)",
+    "Best Conventional Baseline",
+    "Feasible Naive Baseline",
+])
+
+with plan_tabs[0]:
+    render_kpi_row(balanced_eval, best_conv_eval, comparator_name="Best Conv")
+    b_metrics = summary["balanced"]
+    abat = b_metrics.get("abatement_cost_usd_per_t")
+    c_ref = summary.get("carbon_price_reference_usd", 80.0)
+    col_ab1, col_ab2 = st.columns(2)
+    with col_ab1:
+        st.metric(
+            label="Carbon Abatement Cost vs Best Conventional",
+            value=f"${abat:.1f} / tCO2e" if abat is not None else "N/A (Cost Saving)",
+            delta=f"Benchmark: ${c_ref:.0f}/t carbon price (illustrative)",
+            delta_color="off",
         )
-    with col_d2:
-        csv_data = generate_csv_summary(case_data)
-        st.download_button(
-            label="Download CSV",
-            data=csv_data,
-            file_name="green_fleet_case_study_data.csv",
-            mime="text/csv",
-            width="stretch",
+    with col_ab2:
+        st.metric(
+            label="Annual CO2e Emissions Avoided",
+            value=f"{b_metrics.get('emissions_avoided_t', 0.0):,.1f} t CO2e",
+            delta=b_metrics.get("emissions_label", ""),
+            delta_color="normal",
         )
 
-# --- 2. Comparator Toggle & 5 KPI Cards ---
-c_comp, _ = st.columns([4, 6])
-with c_comp:
-    comparator = st.radio(
-        "Compare Optimized Plan Against:",
-        options=["Feasible Naive Baseline", "Best Conventional Baseline"],
-        horizontal=True,
-        help="Naive: fixed-speed conventional HFO without shore power. Best Conventional: optimizer restricted to HFO.",
-    )
+with plan_tabs[1]:
+    render_kpi_row(green_eval, best_conv_eval, comparator_name="Best Conv")
+    g_metrics = summary["green"]
+    abat_g = g_metrics.get("abatement_cost_usd_per_t")
+    c_ref = summary.get("carbon_price_reference_usd", 80.0)
+    col_ag1, col_ag2 = st.columns(2)
+    with col_ag1:
+        st.metric(
+            label="Carbon Abatement Cost vs Best Conventional",
+            value=f"${abat_g:.1f} / tCO2e" if abat_g is not None else "N/A",
+            delta=f"Benchmark: ${c_ref:.0f}/t carbon price (illustrative)",
+            delta_color="off",
+        )
+    with col_ag2:
+        st.metric(
+            label="Annual CO2e Emissions Avoided",
+            value=f"{g_metrics.get('emissions_avoided_t', 0.0):,.1f} t CO2e",
+            delta=g_metrics.get("emissions_label", ""),
+            delta_color="normal",
+        )
 
-active_baseline = naive_eval if comparator == "Feasible Naive Baseline" else best_conv_eval
-comp_name = "Naive" if comparator == "Feasible Naive Baseline" else "Best Conv"
+with plan_tabs[2]:
+    render_kpi_row(best_conv_eval, naive_eval, comparator_name="Naive")
 
-render_kpi_row(opt_eval, active_baseline, comparator_name=comp_name)
+with plan_tabs[3]:
+    render_kpi_row(naive_eval, naive_eval, comparator_name="Naive")
+
+opt_eval = balanced_eval
 
 # --- 3. Seasonal Trajectory & Route Allocation ---
 col_season, col_routes = st.columns([10, 10])

@@ -288,120 +288,123 @@ def simulate_monthly_operations(
 
 
 def run_case_study(
-    pop_size: int = 50,
-    generations: int = 200,
+    pop_size: int = 40,
+    generations: int = 100,
     random_seed: int = 42,
     config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Run complete comparative Case Study between:
+    Run complete comparative Case Study across FOUR distinct operational plans:
     1. Feasible Naive Baseline (Conventional HFO, fixed speed, no shore power)
     2. Best Conventional Baseline (Optimizer restricted to HFO, no shore power)
-    3. Multi-Objective Optimized Plan (Clean fuels, eco-speeds, shore power)
+    3. Balanced Multi-Objective Optimized Plan (w_cost=0.4, w_emiss=0.4, w_fuel=0.2)
+    4. Green Multi-Objective Optimized Plan (w_emiss=0.8, w_cost=0.1, w_fuel=0.1)
+
+    Calculates signed deltas and carbon abatement cost ($ USD / tCO2e avoided) vs Best Conventional.
     """
+    from src.optimization.planner import optimize_fleet_plan
+
     cfg = config or load_config()
-    problem = FleetOptimizationProblem(config=cfg)
-
-    # 1. Evaluate Naive Baseline
-    naive_bits, naive_eval = get_naive_baseline(problem)
-
-    # 2. Evaluate Best Conventional Baseline
-    best_conv_bits, best_conv_eval = get_best_conventional_baseline(
-        problem=problem,
-        pop_size=min(40, pop_size),
-        generations=min(100, generations),
-        random_seed=random_seed,
+    prob_balanced = FleetOptimizationProblem(
+        config=cfg,
+        weights={"fuel": 0.2, "cost": 0.4, "emissions": 0.4},
+        shore_power_forced=True,
+    )
+    prob_green = FleetOptimizationProblem(
+        config=cfg,
+        weights={"fuel": 0.1, "cost": 0.1, "emissions": 0.8},
+        shore_power_forced=True,
     )
 
-    # 3. Run QIEA Optimization seeded with best conventional baseline to ensure
-    # that the optimized green plan is NEVER worse than the best conventional baseline
-    optimizer = QIEA(
-        n_bits=problem.n_bits,
-        pop_size=pop_size,
-        generations=generations,
-        random_seed=random_seed,
-        initial_theta=problem.get_initial_q_angles(),
+    # 1. Optimize Balanced Plan (uses optimize_fleet_plan with 5 unseeded QIEA multi-starts)
+    balanced_res = optimize_fleet_plan(
+        problem=prob_balanced,
+        num_qiea_starts=5,
+        evals_per_start=4000,
+        seeds=[random_seed, random_seed + 1, random_seed + 2, random_seed + 3, random_seed + 4],
     )
-    opt_res = optimizer.optimize(problem.fitness_function, seed_bits=best_conv_bits)
-    optimized_bits = opt_res["best_bits"]
-    optimized_eval = problem.evaluate(optimized_bits)
+    naive_eval = balanced_res["naive_eval"]
+    naive_bits = balanced_res["naive_bits"]
+    best_conv_eval = balanced_res["best_conv_eval"]
+    best_conv_bits = balanced_res["best_conv_bits"]
+    balanced_eval = balanced_res["selected_plan"]
+    balanced_bits = balanced_res["selected_bits"]
 
-    # 4. Compute Metrics & Comparative Deltas against both baselines
-    def compute_deltas(base_ev: Dict[str, Any], opt_ev: Dict[str, Any]) -> Dict[str, Any]:
-        f_b = base_ev["total_fuel_tonnes_hfo_eq"]
-        f_o = opt_ev["total_fuel_tonnes_hfo_eq"]
-        f_diff = f_o - f_b
-        f_pct = (f_diff / max(1e-4, f_b)) * 100.0
+    # 2. Optimize Green Plan (emission-heavy weights)
+    green_res = optimize_fleet_plan(
+        problem=prob_green,
+        num_qiea_starts=5,
+        evals_per_start=4000,
+        seeds=[random_seed + 10, random_seed + 11, random_seed + 12, random_seed + 13, random_seed + 14],
+    )
+    green_eval = green_res["selected_plan"]
+    green_bits = green_res["selected_bits"]
 
-        c_b = base_ev["total_operating_cost_usd"]
-        c_o = opt_ev["total_operating_cost_usd"]
-        c_diff = c_o - c_b
-        c_pct = (c_diff / max(1e-4, c_b)) * 100.0
+    # Carbon price reference from config (illustrative)
+    carbon_price_ref = float(cfg["general"].get("carbon_price_usd_per_tonne", 80.0))
 
-        e_b = base_ev["total_emissions_co2e_tonnes"]
-        e_o = opt_ev["total_emissions_co2e_tonnes"]
-        e_diff = e_o - e_b
-        e_pct = (e_diff / max(1e-4, e_b)) * 100.0
+    # Helper for signed deltas & abatement cost vs Best Conventional
+    def compute_plan_metrics(eval_dict: Dict[str, Any]) -> Dict[str, Any]:
+        c_diff = eval_dict["total_operating_cost_usd"] - best_conv_eval["total_operating_cost_usd"]
+        c_pct = (c_diff / max(1e-4, best_conv_eval["total_operating_cost_usd"])) * 100.0
 
-        ci_b = base_ev["carbon_intensity_g_tnm"]
-        ci_o = opt_ev["carbon_intensity_g_tnm"]
-        ci_diff = ci_o - ci_b
-        ci_pct = (ci_diff / max(1e-4, ci_b)) * 100.0
+        e_diff = eval_dict["total_emissions_co2e_tonnes"] - best_conv_eval["total_emissions_co2e_tonnes"]
+        e_pct = (e_diff / max(1e-4, best_conv_eval["total_emissions_co2e_tonnes"])) * 100.0
+
+        f_diff = eval_dict["total_fuel_tonnes_hfo_eq"] - best_conv_eval["total_fuel_tonnes_hfo_eq"]
+        f_pct = (f_diff / max(1e-4, best_conv_eval["total_fuel_tonnes_hfo_eq"])) * 100.0
+
+        ci_diff = eval_dict["carbon_intensity_g_tnm"] - best_conv_eval["carbon_intensity_g_tnm"]
+        ci_pct = (ci_diff / max(1e-4, best_conv_eval["carbon_intensity_g_tnm"])) * 100.0
+
+        # Abatement cost = delta_cost / emissions_avoided = (cost_plan - cost_conv) / (emiss_conv - emiss_plan)
+        emissions_avoided_t = -e_diff
+        if emissions_avoided_t > 1.0:
+            abatement_cost_usd_per_t = c_diff / emissions_avoided_t
+        else:
+            abatement_cost_usd_per_t = None
 
         return {
-            "fuel_delta_t": round(f_diff, 1),
-            "fuel_delta_pct": round(f_pct, 2),
-            "fuel_label": format_signed_change(f_diff, f_pct, "tonnes"),
+            "fuel_t": round(eval_dict["total_fuel_tonnes_hfo_eq"], 1),
+            "cost_usd": round(eval_dict["total_operating_cost_usd"], 0),
+            "emissions_t": round(eval_dict["total_emissions_co2e_tonnes"], 1),
+            "ci_g_tnm": round(eval_dict["carbon_intensity_g_tnm"], 2),
+            "feasible": eval_dict["is_feasible"],
+            "violations": eval_dict["constraint_violations"],
             "cost_delta_usd": round(c_diff, 0),
             "cost_delta_pct": round(c_pct, 2),
             "cost_label": format_signed_change(c_diff, c_pct, "USD"),
             "emissions_delta_t": round(e_diff, 1),
             "emissions_delta_pct": round(e_pct, 2),
             "emissions_label": format_signed_change(e_diff, e_pct, "t CO2e"),
+            "fuel_delta_t": round(f_diff, 1),
+            "fuel_delta_pct": round(f_pct, 2),
+            "fuel_label": format_signed_change(f_diff, f_pct, "tonnes"),
             "ci_delta_g_tnm": round(ci_diff, 2),
             "ci_delta_pct": round(ci_pct, 2),
             "ci_label": format_signed_change(ci_diff, ci_pct, "g/t-nm"),
+            "emissions_avoided_t": round(emissions_avoided_t, 1) if emissions_avoided_t > 0 else 0.0,
+            "abatement_cost_usd_per_t": round(abatement_cost_usd_per_t, 1) if abatement_cost_usd_per_t is not None else None,
         }
 
-    deltas_vs_naive = compute_deltas(naive_eval, optimized_eval)
-    deltas_vs_conv = compute_deltas(best_conv_eval, optimized_eval)
-
     summary = {
-        "naive": {
-            "fuel_t": round(naive_eval["total_fuel_tonnes_hfo_eq"], 1),
-            "cost_usd": round(naive_eval["total_operating_cost_usd"], 0),
-            "emissions_t": round(naive_eval["total_emissions_co2e_tonnes"], 1),
-            "ci_g_tnm": round(naive_eval["carbon_intensity_g_tnm"], 2),
-            "feasible": naive_eval["is_feasible"],
-            "violations": naive_eval["constraint_violations"],
-        },
-        "best_conventional": {
-            "fuel_t": round(best_conv_eval["total_fuel_tonnes_hfo_eq"], 1),
-            "cost_usd": round(best_conv_eval["total_operating_cost_usd"], 0),
-            "emissions_t": round(best_conv_eval["total_emissions_co2e_tonnes"], 1),
-            "ci_g_tnm": round(best_conv_eval["carbon_intensity_g_tnm"], 2),
-            "feasible": best_conv_eval["is_feasible"],
-            "violations": best_conv_eval["constraint_violations"],
-        },
-        "optimized": {
-            "fuel_t": round(optimized_eval["total_fuel_tonnes_hfo_eq"], 1),
-            "cost_usd": round(optimized_eval["total_operating_cost_usd"], 0),
-            "emissions_t": round(optimized_eval["total_emissions_co2e_tonnes"], 1),
-            "ci_g_tnm": round(optimized_eval["carbon_intensity_g_tnm"], 2),
-            "feasible": optimized_eval["is_feasible"],
-            "violations": optimized_eval["constraint_violations"],
-        },
-        "vs_naive": deltas_vs_naive,
-        "vs_best_conventional": deltas_vs_conv,
+        "naive": compute_plan_metrics(naive_eval),
+        "best_conventional": compute_plan_metrics(best_conv_eval),
+        "balanced": compute_plan_metrics(balanced_eval),
+        "green": compute_plan_metrics(green_eval),
+        "carbon_price_reference_usd": carbon_price_ref,
+        "winner_status_balanced": balanced_res["winner_status"],
+        "winner_status_green": green_res["winner_status"],
     }
 
-    # 5. Detailed Route Allocation Table with Oversupply Ratios
+    # Detailed Route Allocation Table comparing all 4 plans
     route_rows = []
-    for r_key in problem.route_keys:
+    for r_key in prob_balanced.route_keys:
         r_cfg = cfg["routes"][r_key]
         n_det = naive_eval["route_details"][r_key]
         c_det = best_conv_eval["route_details"][r_key]
-        o_det = optimized_eval["route_details"][r_key]
+        b_det = balanced_eval["route_details"][r_key]
+        g_det = green_eval["route_details"][r_key]
 
         route_rows.append(
             {
@@ -411,37 +414,43 @@ def run_case_study(
                 "Demand (TEU)": r_cfg["annual_demand_teu"],
                 "Naive Speed (kn)": n_det["speed_knots"],
                 "Best Conv Speed (kn)": c_det["speed_knots"],
-                "Opt Speed (kn)": o_det["speed_knots"],
+                "Balanced Speed (kn)": b_det["speed_knots"],
+                "Green Speed (kn)": g_det["speed_knots"],
                 "Naive Vessels": n_det["vessels_assigned"],
                 "Best Conv Vessels": c_det["vessels_assigned"],
-                "Opt Vessels": o_det["vessels_assigned"],
-                "Naive Oversupply Ratio": n_det["oversupply_ratio"],
-                "Best Conv Oversupply Ratio": c_det["oversupply_ratio"],
-                "Opt Oversupply Ratio": o_det["oversupply_ratio"],
-                "Naive Sailings/Wk": round(n_det["sailings_per_week"], 2),
-                "Best Conv Sailings/Wk": round(c_det["sailings_per_week"], 2),
-                "Opt Sailings/Wk": round(o_det["sailings_per_week"], 2),
-                "Naive Reliability": round(n_det["reliability"], 2),
-                "Best Conv Reliability": round(c_det["reliability"], 2),
-                "Opt Reliability": round(o_det["reliability"], 2),
+                "Balanced Vessels": b_det["vessels_assigned"],
+                "Green Vessels": g_det["vessels_assigned"],
+                "Naive Oversupply": n_det["oversupply_ratio"],
+                "Best Conv Oversupply": c_det["oversupply_ratio"],
+                "Balanced Oversupply": b_det["oversupply_ratio"],
+                "Green Oversupply": g_det["oversupply_ratio"],
+                "Naive Reliability (%)": round(n_det["reliability"] * 100.0, 1),
+                "Best Conv Reliability (%)": round(c_det["reliability"] * 100.0, 1),
+                "Balanced Reliability (%)": round(b_det["reliability"] * 100.0, 1),
+                "Green Reliability (%)": round(g_det["reliability"] * 100.0, 1),
             }
         )
     df_routes = pd.DataFrame(route_rows)
 
-    # 6. Monthly operational simulation
-    df_monthly = simulate_monthly_operations(problem, naive_bits, best_conv_bits, optimized_bits)
+    # 12-month calendar simulation
+    df_monthly = simulate_monthly_operations(prob_balanced, naive_bits, best_conv_bits, balanced_bits)
 
     return {
         "summary": summary,
         "naive_eval": naive_eval,
         "best_conv_eval": best_conv_eval,
-        "optimized_eval": optimized_eval,
+        "balanced_eval": balanced_eval,
+        "green_eval": green_eval,
+        "optimized_eval": balanced_eval,  # Backward compatibility
         "naive_bits": naive_bits,
         "best_conv_bits": best_conv_bits,
-        "optimized_bits": optimized_bits,
-        "convergence_curve": opt_res["convergence_curve"],
+        "balanced_bits": balanced_bits,
+        "green_bits": green_bits,
+        "optimized_bits": balanced_bits,
+        "convergence_curve": balanced_res["convergence_curve"],
         "df_routes": df_routes,
         "df_monthly": df_monthly,
-        "evaluations": opt_res["evaluations"],
-        "options": problem.options,
+        "evaluations": balanced_res["total_evaluations"] + green_res["total_evaluations"],
+        "options": prob_balanced.options,
+        "carbon_price_ref": carbon_price_ref,
     }

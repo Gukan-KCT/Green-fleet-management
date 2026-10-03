@@ -39,6 +39,7 @@ ALGO_COLORS: Dict[str, str] = {
     "QIEA (Quantum-Inspired)": "#0f4c81",
     "Genetic Algorithm (GA)": "#2a9d8f",
     "Particle Swarm (PSO)": "#e76f51",
+    "Hill-Climb Search": "#7209b7",
     "Random Search": "#6c757d",
 }
 

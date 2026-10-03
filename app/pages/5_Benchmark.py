@@ -44,10 +44,14 @@ inject_css()
 
 cfg = get_default_config()
 
+from app.ui.state import check_artifact_staleness
+if check_artifact_staleness("saved_benchmark_results.pkl"):
+    st.warning("Saved benchmark results are out of date, press Re-run to update.", icon="⚠️")
+
 # --- 1. Load Data & Controls ---
 c_head, c_btn = st.columns([8, 2])
 with c_head:
-    st.caption("Benchmark evaluates 4 algorithms on identical budgets without hardcoded bias: QIEA, Canonical GA, Continuous-to-Binary PSO, and Random Search.")
+    st.caption("Benchmark evaluates 5 algorithms on identical budgets without hardcoded bias: QIEA, Memetic GA, Continuous-to-Binary PSO, Hill-Climb Search, and Random Search.")
 with c_btn:
     rerun_clicked = st.button("Re-run benchmark", width="stretch")
 

@@ -28,14 +28,19 @@ class BinaryGeneticAlgorithm:
         mutation_rate: Optional[float] = None,
         tournament_size: int = 3,
         random_seed: int = 42,
+        use_memetic: bool = True,
+        memetic_interval: int = 8,
     ):
         self.n_bits = n_bits
         self.pop_size = pop_size
         self.generations = generations
+        self.total_budget = pop_size * generations
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate if mutation_rate is not None else (1.0 / n_bits)
         self.tournament_size = tournament_size
         self.random_seed = random_seed
+        self.use_memetic = use_memetic
+        self.memetic_interval = memetic_interval
 
         self.evaluations_count_ = 0
         self.best_bits_: Optional[np.ndarray] = None
@@ -108,18 +113,51 @@ class BinaryGeneticAlgorithm:
 
             pop = np.array(new_pop)
 
-            # Evaluate new population (guaranteeing exact pop_size evaluations per generation)
+            # Evaluate new population (guaranteeing evaluations within budget)
             for i in range(self.pop_size):
+                if self.evaluations_count_ >= self.total_budget:
+                    break
                 fitnesses[i] = float(fitness_func(pop[i]))
                 self.evaluations_count_ += 1
                 if fitnesses[i] < global_best_fitness:
                     global_best_fitness = fitnesses[i]
                     global_best_bits = pop[i].copy()
 
+            # Memetic Local Search on Global Best (identical to QIEA memetic step)
+            if (
+                self.use_memetic
+                and (gen % self.memetic_interval == 0)
+                and (global_best_bits is not None)
+                and (self.evaluations_count_ < self.total_budget)
+            ):
+                cur_bits = global_best_bits.copy()
+                cur_fit = global_best_fitness
+                perm = rng.permutation(self.n_bits)
+
+                for bit_idx in perm:
+                    if self.evaluations_count_ >= self.total_budget:
+                        break
+                    cand = cur_bits.copy()
+                    cand[bit_idx] = 1 - cand[bit_idx]
+                    f = float(fitness_func(cand))
+                    self.evaluations_count_ += 1
+
+                    if f < cur_fit:
+                        cur_bits = cand
+                        cur_fit = f
+                        global_best_bits = cur_bits.copy()
+                        global_best_fitness = cur_fit
+
             self.convergence_curve_.append(global_best_fitness)
 
             if progress_callback:
-                progress_callback(gen + 1, self.generations, global_best_fitness)
+                progress_callback(min(len(self.convergence_curve_), self.generations), self.generations, global_best_fitness)
+
+            if self.evaluations_count_ >= self.total_budget:
+                break
+
+        while len(self.convergence_curve_) < self.generations:
+            self.convergence_curve_.append(global_best_fitness)
 
         self.best_bits_ = global_best_bits
         self.best_fitness_ = global_best_fitness
