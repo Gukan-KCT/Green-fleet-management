@@ -146,11 +146,13 @@ def get_plan(
             prob = FleetOptimizationProblem()
             opt_eval = saved["optimized_eval"]
             routes = build_routes_df(prob, opt_eval)
+            cfg = prob.config if hasattr(prob, 'config') else load_config()
             return clean_json({
                 "optimized_eval": opt_eval,
                 "naive_eval": saved["naive_eval"],
                 "best_conv_eval": saved["best_conv_eval"],
                 "df_routes": routes,
+                "ports": cfg.get("ports", {}),
                 "convergence": saved.get("convergence_curve", []),
                 "is_precomputed": True,
             })
@@ -174,6 +176,7 @@ def get_plan(
         "naive_eval": naive_eval,
         "best_conv_eval": best_conv_eval,
         "df_routes": routes,
+        "ports": cfg.get("ports", {}),
         "convergence": res["convergence_curve"],
         "is_precomputed": False,
     })

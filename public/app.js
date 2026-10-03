@@ -150,6 +150,119 @@ function renderPlanner(data) {
     tbody.appendChild(tr);
   });
 
+  // Fuel color mapper for routes
+  const getFuelColor = (fuel) => {
+    const f = String(fuel || '').toLowerCase();
+    if (f.includes('methanol')) return '#0d9488'; // Teal
+    if (f.includes('ammonia')) return '#0284c7'; // Sky
+    if (f.includes('hydrogen')) return '#8b5cf6'; // Purple
+    if (f.includes('lng')) return '#10b981'; // Emerald
+    if (f.includes('vlsfo')) return '#d97706'; // Amber
+    return '#475569'; // Slate/HFO
+  };
+
+  // Plotly: Geographic Route & Port Infrastructure Map
+  const ports = data.ports || {};
+  const mapTraces = [];
+
+  // 1. Draw Route Lines
+  (data.df_routes || []).forEach(r => {
+    const origKey = String(r['Origin'] || '').toLowerCase();
+    const destKey = String(r['Destination'] || '').toLowerCase();
+    const origPort = ports[origKey];
+    const destPort = ports[destKey];
+
+    if (origPort && destPort && origPort.lat != null && destPort.lat != null) {
+      const numVsl = r['Vessels'] || 1;
+      const fuel = r['Fuel'] || 'HFO';
+      const speed = r['Speed (knots)'] || 14.0;
+      const rel = r['Reliability (%)'] || 95.0;
+      const routeId = r['Route ID'] || '';
+      const color = getFuelColor(fuel);
+
+      const hoverText = `<b>Route ${routeId}</b> (${r['Origin']} → ${r['Destination']})<br>` +
+                        `• Deployed Fleet: <b>${numVsl} vessel(s)</b><br>` +
+                        `• Propulsion Fuel: <b>${fuel}</b><br>` +
+                        `• Service Speed: <b>${speed} knots</b><br>` +
+                        `• Schedule Reliability: <b>${rel}%</b>`;
+
+      mapTraces.push({
+        type: 'scattergeo',
+        mode: 'lines',
+        lat: [origPort.lat, destPort.lat],
+        lon: [origPort.lon, destPort.lon],
+        line: {
+          width: Math.max(3, Math.min(8, numVsl * 2.2)),
+          color: color
+        },
+        name: `${routeId}: ${fuel}`,
+        hoverinfo: 'text',
+        text: hoverText,
+        showlegend: false
+      });
+    }
+  });
+
+  // 2. Draw Port Terminals
+  const portLats = [], portLons = [], portTexts = [], portNames = [];
+  Object.entries(ports).forEach(([pId, pInfo]) => {
+    if (pInfo.lat != null && pInfo.lon != null) {
+      portLats.push(pInfo.lat);
+      portLons.push(pInfo.lon);
+      const cleanName = (pInfo.name || pId).replace(/\s*\([^)]*\)/g, '');
+      portNames.push(cleanName);
+      const sp = pInfo.has_shore_power ? 'Available (Cold Ironing Active)' : 'Not Installed';
+      const fee = pInfo.port_call_fee_usd ? `$${pInfo.port_call_fee_usd.toLocaleString()}` : '$0';
+      portTexts.push(
+        `<b>${pInfo.name || pId}</b><br>` +
+        `• Country: ${pInfo.country || ''}<br>` +
+        `• Shore Power OPS: <b>${sp}</b><br>` +
+        `• Port Call Fee: <b>${fee}</b>`
+      );
+    }
+  });
+
+  if (portLats.length > 0) {
+    mapTraces.push({
+      type: 'scattergeo',
+      mode: 'markers+text',
+      lat: portLats,
+      lon: portLons,
+      marker: {
+        size: 10,
+        color: '#0284c7',
+        symbol: 'circle',
+        line: { width: 2, color: '#ffffff' }
+      },
+      text: portNames,
+      textposition: 'top right',
+      textfont: { size: 11, color: '#0f172a', family: 'Inter, sans-serif' },
+      hoverinfo: 'text',
+      hovertext: portTexts,
+      name: 'Ports',
+      showlegend: false
+    });
+  }
+
+  Plotly.newPlot('chart-map', mapTraces, {
+    geo: {
+      scope: 'asia',
+      center: { lat: 12.0, lon: 85.0 },
+      projection: { scale: 2.3 },
+      showland: true,
+      landcolor: '#f8fafc',
+      countrycolor: '#cbd5e1',
+      showocean: true,
+      oceancolor: '#e0f2fe',
+      showcoastlines: true,
+      coastlinecolor: '#94a3b8',
+      bgcolor: 'rgba(0,0,0,0)'
+    },
+    margin: { l: 0, r: 0, t: 10, b: 0 },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Inter, sans-serif' }
+  }, { responsive: true, displayModeBar: false });
+
   // Plotly: Allocation Chart
   const routeIDs = (data.df_routes || []).map(r => r['Route ID']);
   const vessels = (data.df_routes || []).map(r => r['Vessels']);
