@@ -841,149 +841,141 @@ body {
           </div>
         </div>
       </section>
- 
-+      <!-- ================= 2. NETWORK BUILDER VIEW ================= -->
-+      <section id="page-network" class="view-panel" style="display: none;">
-+        <!-- Network Controls & Actions -->
-+        <div class="card" style="padding: 0.85rem 1.25rem;">
-+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
-+            <div class="btn-group">
-+              <span style="font-size: 0.85rem; font-weight: 700; color: var(--slate-700); align-self: center;">Active Network:</span>
-+              <span class="badge badge-navy" id="net-badge-status">Custom Network (5 routes)</span>
-+              <button class="btn btn-outline" id="net-btn-reset">Reset to Demo Network</button>
-+            </div>
-+            <div class="btn-group">
-+              <button class="btn btn-outline" id="net-btn-export">📥 Export JSON</button>
-+              <button class="btn btn-primary" id="net-btn-apply">⚡ Optimize Active Network</button>
-+            </div>
-+          </div>
-+        </div>
-+
-+        <!-- Interactive Map and Network Metrics -->
-+        <div class="charts-grid">
-+          <div class="card" style="grid-column: span 2;">
-+            <div class="card-header">
-+              <div>
-+                <div class="card-title">Maritime Shipping Network Topology</div>
-+                <div class="card-subtitle">Global ports and active corridor routes with nautical distances</div>
-+              </div>
-+              <span class="badge badge-amber">Interactive Geodesic Projection</span>
-+            </div>
-+            <div id="chart-network-map" style="width: 100%; height: 420px;"></div>
-+          </div>
-+        </div>
-+
-+        <!-- Add Route Corridor & Add Port Rows -->
-+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
-+          <!-- Add Route Corridor -->
-+          <div class="card">
-+            <div class="card-header">
-+              <div class="card-title">🚢 Define Shipping Corridor</div>
-+              <div class="card-subtitle">Select origin and destination to calculate nautical distance</div>
-+            </div>
-+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
-+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-+                <div class="form-group">
-+                  <label>Origin Port</label>
-+                  <select class="form-control" id="net-origin-select"></select>
-+                </div>
-+                <div class="form-group">
-+                  <label>Destination Port</label>
-+                  <select class="form-control" id="net-dest-select"></select>
-+                </div>
-+              </div>
-+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-+                <div class="form-group">
-+                  <label>Annual Demand (TEU)</label>
-+                  <input type="number" class="form-control" id="net-route-demand" value="120000" step="10000">
-+                </div>
-+                <div class="form-group">
-+                  <label>Sea Condition</label>
-+                  <select class="form-control" id="net-route-weather">
-+                    <option value="Calm (0.15)">Calm (0.15)</option>
-+                    <option value="Moderate (0.30)" selected>Moderate (0.30)</option>
-+                    <option value="Rough (0.50)">Rough (0.50)</option>
-+                  </select>
-+                </div>
-+              </div>
-+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: flex-end;">
-+                <div class="form-group">
-+                  <label>Calculated Distance (nm)</label>
-+                  <input type="number" class="form-control" id="net-route-distance" value="890" step="10">
-+                </div>
-+                <button class="btn btn-primary" id="net-btn-add-route" style="height: 38px;">+ Add Corridor</button>
-+              </div>
-+            </div>
-+          </div>
-+
-+          <!-- Add Custom Port or Import from Catalog -->
-+          <div class="card">
-+            <div class="card-header">
-+              <div class="card-title">⚓ Add / Import Port</div>
-+              <div class="card-subtitle">Add custom terminal coordinates or import from global catalog</div>
-+            </div>
-+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
-+              <div class="form-group">
-+                <label>Import from Global Catalog (20+ Ports)</label>
-+                <div style="display: flex; gap: 0.5rem;">
-+                  <select class="form-control" id="net-catalog-select"></select>
-+                  <button class="btn btn-outline" id="net-btn-import-port">Import</button>
-+                </div>
-+              </div>
-+              <div style="border-top: 1px solid var(--slate-200); padding-top: 0.75rem;">
-+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
-+                  <div class="form-group">
-+                    <label>Custom Name</label>
-+                    <input type="text" class="form-control" id="net-custom-name" placeholder="e.g. Busan">
-+                  </div>
-+                  <div class="form-group">
-+                    <label>Latitude</label>
-+                    <input type="number" class="form-control" id="net-custom-lat" placeholder="35.1" step="0.01">
-+                  </div>
-+                  <div class="form-group">
-+                    <label>Longitude</label>
-+                    <input type="number" class="form-control" id="net-custom-lon" placeholder="129.0" step="0.01">
-+                  </div>
-+                </div>
-+                <div style="display: flex; justify-content: space-between; align-items: center;">
-+                  <label style="font-size: 0.8rem; color: var(--slate-700); display: flex; align-items: center; gap: 0.35rem;">
-+                    <input type="checkbox" id="net-custom-shore"> Shore Power Ready
-+                  </label>
-+                  <button class="btn btn-outline" id="net-btn-add-custom-port">+ Create Port</button>
-+                </div>
-+              </div>
-+            </div>
-+          </div>
-+        </div>
-+
-+        <!-- Active Routes Table -->
-+        <div class="card">
-+          <div class="card-header">
-+            <div class="card-title">Active Corridors in Network (<span id="net-count-routes">5</span> / 8)</div>
-+            <div class="card-subtitle">Shipping corridors configured for fleet deployment and quantum optimization</div>
-+          </div>
-+          <div class="table-responsive">
-+            <table class="data-table" id="table-net-routes">
-+              <thead>
-+                <tr>
-+                  <th>Corridor ID</th>
-+                  <th>Origin</th>
-+                  <th>Destination</th>
-+                  <th>Distance</th>
-+                  <th>Annual Demand</th>
-+                  <th>Sea Severity</th>
-+                  <th>Actions</th>
-+                </tr>
-+              </thead>
-+              <tbody id="tbody-net-routes">
-+              </tbody>
-+            </table>
-+          </div>
-+        </div>
-+      </section>
-+
-+      <!-- ================= 3. FUEL PREDICTOR VIEW ================= -->
 
+      <!-- ================= NETWORK BUILDER VIEW ================= -->
+      <section id="page-network" class="view-panel" style="display: none;">
+        <div class="card" style="padding: 0.85rem 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <div class="btn-group">
+              <span style="font-size: 0.85rem; font-weight: 700; color: var(--slate-700); align-self: center;">Active Network:</span>
+              <span class="badge badge-navy" id="net-badge-status">Demo Network (5 routes)</span>
+              <button class="btn btn-outline" id="net-btn-reset">Reset to Demo</button>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" id="net-btn-export">&#x1F4E5; Export JSON</button>
+              <button class="btn btn-primary" id="net-btn-apply">&#x26A1; Optimize Network</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="card" style="grid-column: span 2;">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Maritime Shipping Network Topology</div>
+                <div class="card-subtitle">Global ports and active corridor routes with nautical distances</div>
+              </div>
+              <span class="badge badge-amber">Interactive Geodesic Projection</span>
+            </div>
+            <div id="chart-network-map" style="width: 100%; height: 420px;"></div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">&#x1F6A2; Define Shipping Corridor</div>
+              <div class="card-subtitle">Select origin and destination to calculate nautical distance</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                <div class="form-group">
+                  <label>Origin Port</label>
+                  <select class="form-control" id="net-origin-select"></select>
+                </div>
+                <div class="form-group">
+                  <label>Destination Port</label>
+                  <select class="form-control" id="net-dest-select"></select>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                <div class="form-group">
+                  <label>Annual Demand (TEU)</label>
+                  <input type="number" class="form-control" id="net-route-demand" value="120000" step="10000">
+                </div>
+                <div class="form-group">
+                  <label>Sea Condition</label>
+                  <select class="form-control" id="net-route-weather">
+                    <option value="Calm (0.15)">Calm (0.15)</option>
+                    <option value="Moderate (0.30)" selected>Moderate (0.30)</option>
+                    <option value="Rough (0.50)">Rough (0.50)</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: flex-end;">
+                <div class="form-group">
+                  <label>Calculated Distance (nm)</label>
+                  <input type="number" class="form-control" id="net-route-distance" value="890" step="10">
+                </div>
+                <button class="btn btn-primary" id="net-btn-add-route" style="height: 38px;">Add Corridor</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">&#x2693; Add / Import Port</div>
+              <div class="card-subtitle">Add custom terminal coordinates or import from global catalog</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+              <div class="form-group">
+                <label>Import from Global Catalog (20+ Ports)</label>
+                <div style="display: flex; gap: 0.5rem;">
+                  <select class="form-control" id="net-catalog-select"></select>
+                  <button class="btn btn-outline" id="net-btn-import-port">Import</button>
+                </div>
+              </div>
+              <div style="border-top: 1px solid var(--slate-200); padding-top: 0.75rem;">
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
+                  <div class="form-group">
+                    <label>Custom Name</label>
+                    <input type="text" class="form-control" id="net-custom-name" placeholder="e.g. Busan">
+                  </div>
+                  <div class="form-group">
+                    <label>Latitude</label>
+                    <input type="number" class="form-control" id="net-custom-lat" placeholder="35.1" step="0.01">
+                  </div>
+                  <div class="form-group">
+                    <label>Longitude</label>
+                    <input type="number" class="form-control" id="net-custom-lon" placeholder="129.0" step="0.01">
+                  </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 0.8rem; color: var(--slate-700); display: flex; align-items: center; gap: 0.35rem;">
+                    <input type="checkbox" id="net-custom-shore"> Shore Power Ready
+                  </label>
+                  <button class="btn btn-outline" id="net-btn-add-custom-port">Create Port</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Active Corridors (<span id="net-count-routes">0</span> / 8)</div>
+            <div class="card-subtitle">Shipping corridors configured for fleet deployment</div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="table-net-routes">
+              <thead>
+                <tr>
+                  <th>Corridor</th>
+                  <th>Origin</th>
+                  <th>Destination</th>
+                  <th>Distance</th>
+                  <th>Annual Demand</th>
+                  <th>Sea Severity</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-net-routes"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 2. FUEL PREDICTOR VIEW ================= -->
       <section id="page-predictor" class="view-panel" style="display: none;">
         <div class="card">
           <div class="controls-row">
@@ -1284,7 +1276,7 @@ const viewSubtitle = document.getElementById('view-subtitle');
 
 const pageMeta = {
   planner: { title: 'Fleet Planner', sub: 'Configure constraints and optimize fleet assignment across regional shipping corridors.' },
-  network: { title: 'Network Builder', sub: 'Define custom maritime ports, configure global corridors, calculate nautical distances, and deploy custom fleets.' },
+  network: { title: 'Network Builder & Topology', sub: 'Configure maritime corridors, import ports from the global catalog, and optimize custom fleet networks.' },
   predictor: { title: 'Fuel Consumption Predictor', sub: 'Estimate single-voyage bunker burn and compare classical baseline vs QIEA-tuned predictors.' },
   fuels: { title: 'Alternative Marine Fuels', sub: 'Evaluate volumetric energy density, lifecycle emissions, and cargo slot displacement.' },
   shore: { title: 'Port Shore Power (Cold Ironing)', sub: 'Assess auxiliary generator fuel displacement against municipal electric grid carbon factors.' },
@@ -1310,7 +1302,7 @@ navItems.forEach(item => {
     }
 
     // Trigger initial load for pages
-    if (targetPage === 'network') loadNetworkBuilder();
+    if (targetPage === 'network') loadNetwork();
     if (targetPage === 'predictor') loadPredictor();
     if (targetPage === 'fuels') loadFuels();
     if (targetPage === 'shore') loadShorePower();
@@ -1470,6 +1462,372 @@ function renderPlanner(data) {
     plot_bgcolor: 'rgba(0,0,0,0)',
     font: { family: 'Inter, sans-serif' },
     yaxis: { title: 'Emissions (t CO2e)', gridcolor: '#f1f5f9' }
+  }, { responsive: true, displayModeBar: false });
+}
+
+// ================= NETWORK BUILDER LOGIC =================
+let networkPorts = {};
+let networkRoutes = [];
+let catalogPorts = [];
+let networkInitialized = false;
+
+async function loadNetwork() {
+  if (!networkInitialized) {
+    await fetchCatalogAndInit();
+    networkInitialized = true;
+  }
+}
+
+async function fetchCatalogAndInit() {
+  try {
+    const res = await fetch('/api/network-catalog');
+    const data = await res.json();
+    catalogPorts = data.catalog_ports || [];
+    
+    // Populate catalog select dropdown
+    const catSelect = document.getElementById('net-catalog-select');
+    if (catSelect) {
+      catSelect.innerHTML = '';
+      catalogPorts.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = `${p.name} (${p.lat.toFixed(2)}, ${p.lon.toFixed(2)})`;
+        catSelect.appendChild(opt);
+      });
+    }
+
+    // Set demo network
+    const demo = data.demo_network || {};
+    networkPorts = { ...(demo.ports || {}) };
+    networkRoutes = [...(demo.routes || [])];
+
+    renderNetworkUI();
+  } catch (err) {
+    console.error('Failed to load network catalog:', err);
+  }
+}
+
+function updatePortDropdowns() {
+  const oSel = document.getElementById('net-origin-select');
+  const dSel = document.getElementById('net-dest-select');
+  if (!oSel || !dSel) return;
+
+  const currentO = oSel.value;
+  const currentD = dSel.value;
+
+  oSel.innerHTML = '';
+  dSel.innerHTML = '';
+
+  const portNames = Object.keys(networkPorts).sort();
+  portNames.forEach((pName, idx) => {
+    const p = networkPorts[pName];
+    const optO = document.createElement('option');
+    optO.value = pName;
+    optO.textContent = `${p.name} [${p.lat}, ${p.lon}]`;
+    oSel.appendChild(optO);
+
+    const optD = document.createElement('option');
+    optD.value = pName;
+    optD.textContent = `${p.name} [${p.lat}, ${p.lon}]`;
+    dSel.appendChild(optD);
+  });
+
+  if (portNames.includes(currentO)) oSel.value = currentO;
+  else if (portNames.length > 0) oSel.value = portNames[0];
+
+  if (portNames.includes(currentD)) dSel.value = currentD;
+  else if (portNames.length > 1) dSel.value = portNames[1];
+
+  calculateNetworkDistance();
+}
+
+async function calculateNetworkDistance() {
+  const oSel = document.getElementById('net-origin-select');
+  const dSel = document.getElementById('net-dest-select');
+  const distInput = document.getElementById('net-route-distance');
+  if (!oSel || !dSel || !distInput) return;
+
+  const p1 = networkPorts[oSel.value];
+  const p2 = networkPorts[dSel.value];
+  if (!p1 || !p2 || p1.name === p2.name) {
+    distInput.value = 0;
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/calculate-distance?lat1=${p1.lat}&lon1=${p1.lon}&lat2=${p2.lat}&lon2=${p2.lon}&detour_factor=1.15`);
+    const data = await res.json();
+    distInput.value = data.distance_nm || 0;
+  } catch (err) {
+    console.error('Failed to calculate distance:', err);
+  }
+}
+
+document.getElementById('net-origin-select')?.addEventListener('change', calculateNetworkDistance);
+document.getElementById('net-dest-select')?.addEventListener('change', calculateNetworkDistance);
+
+// Add custom port
+document.getElementById('net-btn-add-custom-port')?.addEventListener('click', () => {
+  const name = document.getElementById('net-custom-name').value.trim();
+  const lat = parseFloat(document.getElementById('net-custom-lat').value);
+  const lon = parseFloat(document.getElementById('net-custom-lon').value);
+  const shore = document.getElementById('net-custom-shore').checked;
+
+  if (!name) { alert('Please enter a port name.'); return; }
+  if (isNaN(lat) || lat < -90 || lat > 90) { alert('Latitude must be between -90 and 90.'); return; }
+  if (isNaN(lon) || lon < -180 || lon > 180) { alert('Longitude must be between -180 and 180.'); return; }
+
+  networkPorts[name] = {
+    name: name,
+    lat: lat,
+    lon: lon,
+    shore_power_available: shore,
+    bunkering_fuels: ['HFO', 'MGO', 'VLSFO']
+  };
+
+  document.getElementById('net-custom-name').value = '';
+  document.getElementById('net-custom-lat').value = '';
+  document.getElementById('net-custom-lon').value = '';
+  document.getElementById('net-custom-shore').checked = false;
+
+  renderNetworkUI();
+});
+
+// Import catalog port
+document.getElementById('net-btn-import-port')?.addEventListener('click', () => {
+  const catSelect = document.getElementById('net-catalog-select');
+  const selName = catSelect.value;
+  const p = catalogPorts.find(x => x.name === selName);
+  if (!p) return;
+
+  networkPorts[p.name] = {
+    name: p.name,
+    lat: p.lat,
+    lon: p.lon,
+    shore_power_available: false,
+    bunkering_fuels: ['HFO', 'MGO']
+  };
+
+  renderNetworkUI();
+});
+
+// Add corridor
+document.getElementById('net-btn-add-route')?.addEventListener('click', () => {
+  if (networkRoutes.length >= 8) {
+    alert('Maximum 8 active corridors permitted in network optimization.');
+    return;
+  }
+
+  const oSel = document.getElementById('net-origin-select');
+  const dSel = document.getElementById('net-dest-select');
+  const demand = parseFloat(document.getElementById('net-route-demand').value);
+  const weatherStr = document.getElementById('net-route-weather').value;
+  const dist = parseFloat(document.getElementById('net-route-distance').value);
+
+  if (oSel.value === dSel.value) {
+    alert('Origin and Destination ports must be different.');
+    return;
+  }
+  if (isNaN(demand) || demand <= 0) {
+    alert('Annual demand must be greater than 0.');
+    return;
+  }
+
+  const weatherMap = { 'Calm (0.15)': 0.15, 'Moderate (0.30)': 0.30, 'Rough (0.50)': 0.50 };
+  const seaMargin = weatherMap[weatherStr] || 0.30;
+  const rId = `R${networkRoutes.length + 1}`;
+
+  networkRoutes.push({
+    route_id: rId,
+    name: `${oSel.value} - ${dSel.value}`,
+    origin: oSel.value,
+    destination: dSel.value,
+    distance_nm: dist,
+    annual_demand_teu: demand,
+    sea_margin: seaMargin
+  });
+
+  renderNetworkUI();
+});
+
+function deleteRoute(idx) {
+  networkRoutes.splice(idx, 1);
+  networkRoutes.forEach((r, i) => { r.route_id = `R${i + 1}`; });
+  renderNetworkUI();
+}
+
+// Reset demo
+document.getElementById('net-btn-reset')?.addEventListener('click', () => {
+  fetchCatalogAndInit();
+});
+
+// Export JSON
+document.getElementById('net-btn-export')?.addEventListener('click', () => {
+  const payload = {
+    name: "Custom Exported Fleet Network",
+    ports: networkPorts,
+    routes: networkRoutes
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'green_fleet_network.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Optimize custom network
+document.getElementById('net-btn-apply')?.addEventListener('click', async () => {
+  if (networkRoutes.length === 0) {
+    alert('Please define at least 1 corridor before optimizing.');
+    return;
+  }
+
+  const applyBtn = document.getElementById('net-btn-apply');
+  applyBtn.disabled = true;
+  applyBtn.textContent = 'Optimizing Network...';
+
+  const payload = {
+    name: "User Configured Fleet Network",
+    ports: networkPorts,
+    routes: networkRoutes
+  };
+
+  try {
+    const res = await fetch('/api/optimize-network', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert('Optimization Error: ' + (data.detail || 'Failed to solve custom network.'));
+      return;
+    }
+
+    // Switch to planner view and render results
+    const plannerNav = document.querySelector('.nav-item[data-page="planner"]');
+    if (plannerNav) plannerNav.click();
+    renderPlanner(data);
+
+    if (data.infeasibility_suggestion) {
+      alert('Network Note: ' + data.infeasibility_suggestion);
+    }
+  } catch (err) {
+    console.error('Failed to optimize custom network:', err);
+    alert('Error running optimization on custom network.');
+  } finally {
+    applyBtn.disabled = false;
+    applyBtn.textContent = '⚡ Optimize Network';
+  }
+});
+
+function renderNetworkUI() {
+  updatePortDropdowns();
+
+  // Update corridor count
+  const countSpan = document.getElementById('net-count-routes');
+  if (countSpan) countSpan.textContent = networkRoutes.length;
+
+  const badgeStatus = document.getElementById('net-badge-status');
+  if (badgeStatus) {
+    badgeStatus.textContent = `${networkRoutes.length} Corridors | ${Object.keys(networkPorts).length} Ports`;
+  }
+
+  // Update corridors table
+  const tbody = document.getElementById('tbody-net-routes');
+  if (tbody) {
+    tbody.innerHTML = '';
+    networkRoutes.forEach((r, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${r.route_id}</b> (${r.name})</td>
+        <td>${r.origin}</td>
+        <td>${r.destination}</td>
+        <td><b>${Math.round(r.distance_nm).toLocaleString()} nm</b></td>
+        <td>${Math.round(r.annual_demand_teu).toLocaleString()} TEU</td>
+        <td><span class="badge ${r.sea_margin > 0.35 ? 'badge-amber' : 'badge-navy'}">${r.sea_margin}</span></td>
+        <td><button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #dc2626; border-color: #fecaca;" onclick="deleteRoute(${idx})">✕ Delete</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Render Network Plotly Map
+  renderNetworkMap();
+}
+
+function renderNetworkMap() {
+  const mapDiv = document.getElementById('chart-network-map');
+  if (!mapDiv) return;
+
+  const portNames = Object.keys(networkPorts);
+  const portLats = portNames.map(k => networkPorts[k].lat);
+  const portLons = portNames.map(k => networkPorts[k].lon);
+  const portLabels = portNames.map(k => `${k} (${networkPorts[k].shore_power_available ? '⚡ Shore Power' : 'No Cold Ironing'})`);
+
+  const traces = [];
+
+  // Route lines
+  networkRoutes.forEach((r) => {
+    const p1 = networkPorts[r.origin];
+    const p2 = networkPorts[r.destination];
+    if (p1 && p2) {
+      traces.push({
+        type: 'scattergeo',
+        locationmode: 'world',
+        lat: [p1.lat, p2.lat],
+        lon: [p1.lon, p2.lon],
+        mode: 'lines',
+        line: { width: 2.5, color: '#0f4c81' },
+        hoverinfo: 'text',
+        text: `${r.route_id}: ${r.origin} → ${r.destination} (${Math.round(r.distance_nm)} nm)`,
+        showlegend: false
+      });
+    }
+  });
+
+  // Port markers
+  traces.push({
+    type: 'scattergeo',
+    locationmode: 'world',
+    lat: portLats,
+    lon: portLons,
+    mode: 'markers+text',
+    text: portNames,
+    textposition: 'top center',
+    textfont: { family: 'Inter, sans-serif', size: 11, color: '#0f172a' },
+    marker: {
+      size: 9,
+      color: portNames.map(k => networkPorts[k].shore_power_available ? '#0d9488' : '#d97706'),
+      line: { width: 1.5, color: '#ffffff' }
+    },
+    hoverinfo: 'text',
+    hovertext: portLabels,
+    name: 'Terminals / Ports'
+  });
+
+  Plotly.newPlot('chart-network-map', traces, {
+    geo: {
+      projection: { type: 'equirectangular' },
+      showland: true,
+      landcolor: '#f1f5f9',
+      showocean: true,
+      oceancolor: '#f8fafc',
+      showcoastlines: true,
+      coastlinecolor: '#cbd5e1',
+      showcountries: true,
+      countrycolor: '#e2e8f0',
+      lataxis: { range: [-10, 65] },
+      lonaxis: { range: [-10, 135] }
+    },
+    margin: { t: 10, r: 10, l: 10, b: 10 },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Inter, sans-serif' },
+    legend: { orientation: 'h', y: 1.05 }
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -1771,299 +2129,6 @@ async function loadCaseStudy() {
   } catch (err) {
     console.error('Error loading case study:', err);
   }
-}
-
-// ================= 2. NETWORK BUILDER CLIENT LOGIC =================
-let networkPortsCatalog = {};
-let activeNetwork = {
-  name: "Demo Network",
-  ports: {},
-  routes: []
-};
-
-const netOriginSelect = document.getElementById('net-origin-select');
-const netDestSelect = document.getElementById('net-dest-select');
-const netCatalogSelect = document.getElementById('net-catalog-select');
-const netRouteDist = document.getElementById('net-route-distance');
-const netRouteDemand = document.getElementById('net-route-demand');
-const netRouteWeather = document.getElementById('net-route-weather');
-const netBtnAddRoute = document.getElementById('net-btn-add-route');
-const netBtnImportPort = document.getElementById('net-btn-import-port');
-const netBtnAddCustomPort = document.getElementById('net-btn-add-custom-port');
-const netBtnReset = document.getElementById('net-btn-reset');
-const netBtnExport = document.getElementById('net-btn-export');
-const netBtnApply = document.getElementById('net-btn-apply');
-
-async function loadNetworkBuilder() {
-  try {
-    const res = await fetch('/api/ports-catalog');
-    const data = await res.json();
-    networkPortsCatalog = data.catalog?.ports || {};
-    
-    // Initialize if empty
-    if (!activeNetwork.routes.length && data.demo_network) {
-      activeNetwork = data.demo_network;
-    }
-    
-    populatePortDropdowns();
-    renderNetworkUI();
-  } catch (err) {
-    console.error('Error loading ports catalog:', err);
-  }
-}
-
-function populatePortDropdowns() {
-  // Populate catalog dropdown
-  netCatalogSelect.innerHTML = '';
-  Object.entries(networkPortsCatalog).forEach(([code, p]) => {
-    const opt = document.createElement('option');
-    opt.value = code;
-    opt.textContent = `${p.name} (${p.country || 'Global'})`;
-    netCatalogSelect.appendChild(opt);
-  });
-
-  // Populate active ports in route selectors
-  netOriginSelect.innerHTML = '';
-  netDestSelect.innerHTML = '';
-  const portKeys = Object.keys(activeNetwork.ports || {});
-  portKeys.forEach(pKey => {
-    const p = activeNetwork.ports[pKey];
-    const opt1 = document.createElement('option');
-    opt1.value = pKey;
-    opt1.textContent = `${p.name}`;
-    netOriginSelect.appendChild(opt1);
-
-    const opt2 = document.createElement('option');
-    opt2.value = pKey;
-    opt2.textContent = `${p.name}`;
-    netDestSelect.appendChild(opt2);
-  });
-  if (portKeys.length > 1) {
-    netDestSelect.selectedIndex = 1;
-  }
-  updateRouteDistance();
-}
-
-[netOriginSelect, netDestSelect].forEach(el => el.addEventListener('change', updateRouteDistance));
-
-async function updateRouteDistance() {
-  const origKey = netOriginSelect.value;
-  const destKey = netDestSelect.value;
-  if (!origKey || !destKey || origKey === destKey) return;
-
-  const p1 = activeNetwork.ports[origKey];
-  const p2 = activeNetwork.ports[destKey];
-  if (!p1 || !p2) return;
-
-  try {
-    const res = await fetch(`/api/calculate-distance?lat1=${p1.lat}&lon1=${p1.lon}&lat2=${p2.lat}&lon2=${p2.lon}&detour_factor=1.15`);
-    const data = await res.json();
-    netRouteDist.value = data.distance_nm;
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-netBtnAddRoute.addEventListener('click', () => {
-  const orig = netOriginSelect.value;
-  const dest = netDestSelect.value;
-  if (!orig || !dest || orig === dest) {
-    alert("Please select distinct Origin and Destination ports.");
-    return;
-  }
-  if (activeNetwork.routes.length >= 8) {
-    alert("Maximum 8 active interactive routes permitted.");
-    return;
-  }
-  const nextId = `R${activeNetwork.routes.length + 1}`;
-  const weatherMap = { "Calm (0.15)": 0.15, "Moderate (0.30)": 0.30, "Rough (0.50)": 0.50 };
-  const seaVal = weatherMap[netRouteWeather.value] || 0.30;
-
-  activeNetwork.routes.push({
-    route_id: nextId,
-    name: `${activeNetwork.ports[orig].name} - ${activeNetwork.ports[dest].name}`,
-    origin: orig,
-    destination: dest,
-    distance_nm: parseFloat(netRouteDist.value) || 500,
-    annual_demand_teu: parseInt(netRouteDemand.value) || 100000,
-    sea_condition_factor: seaVal
-  });
-  renderNetworkUI();
-});
-
-netBtnImportPort.addEventListener('click', () => {
-  const code = netCatalogSelect.value;
-  const catPort = networkPortsCatalog[code];
-  if (!catPort) return;
-  activeNetwork.ports[code] = {
-    name: catPort.name,
-    lat: catPort.lat,
-    lon: catPort.lon,
-    has_shore_power: catPort.has_shore_power || false,
-    grid_ef_tonnes_per_mwh: catPort.grid_ef_tonnes_per_mwh || 0.65,
-    electricity_price_usd_per_mwh: catPort.electricity_price_usd_per_mwh || 120.0,
-    supported_fuels: catPort.supported_fuels || ["HFO", "MGO"]
-  };
-  populatePortDropdowns();
-  renderNetworkUI();
-});
-
-netBtnAddCustomPort.addEventListener('click', () => {
-  const name = document.getElementById('net-custom-name').value.trim();
-  const lat = parseFloat(document.getElementById('net-custom-lat').value);
-  const lon = parseFloat(document.getElementById('net-custom-lon').value);
-  const shore = document.getElementById('net-custom-shore').checked;
-
-  if (!name || isNaN(lat) || isNaN(lon)) {
-    alert("Please enter a valid Port Name, Latitude, and Longitude.");
-    return;
-  }
-  const code = name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || "PORT";
-  activeNetwork.ports[code] = {
-    name: name,
-    lat: lat,
-    lon: lon,
-    has_shore_power: shore,
-    grid_ef_tonnes_per_mwh: 0.65,
-    electricity_price_usd_per_mwh: 120.0,
-    supported_fuels: ["HFO", "MGO"]
-  };
-  document.getElementById('net-custom-name').value = '';
-  populatePortDropdowns();
-  renderNetworkUI();
-});
-
-netBtnReset.addEventListener('click', async () => {
-  const res = await fetch('/api/ports-catalog');
-  const data = await res.json();
-  if (data.demo_network) {
-    activeNetwork = data.demo_network;
-    populatePortDropdowns();
-    renderNetworkUI();
-  }
-});
-
-netBtnExport.addEventListener('click', () => {
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(activeNetwork, null, 2));
-  const dlAnchorElem = document.createElement('a');
-  dlAnchorElem.setAttribute("href", dataStr);
-  dlAnchorElem.setAttribute("download", `network_${Date.now()}.json`);
-  dlAnchorElem.click();
-});
-
-netBtnApply.addEventListener('click', async () => {
-  netBtnApply.disabled = true;
-  netBtnApply.textContent = 'Optimizing Custom Network...';
-  try {
-    const res = await fetch('/api/optimize-network', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(activeNetwork)
-    });
-    const data = await res.json();
-    // Switch to Fleet Planner view and render results
-    document.querySelector('.nav-item[data-page="planner"]').click();
-    renderPlanner(data);
-    if (data.infeasibility_suggestion) {
-      alert("Notice: " + data.infeasibility_suggestion);
-    }
-  } catch (err) {
-    alert("Optimization error: " + err.message);
-  } finally {
-    netBtnApply.disabled = false;
-    netBtnApply.textContent = '⚡ Optimize Active Network';
-  }
-});
-
-function renderNetworkUI() {
-  document.getElementById('net-count-routes').textContent = activeNetwork.routes.length;
-  document.getElementById('net-badge-status').textContent = `${activeNetwork.name || 'Custom Network'} (${activeNetwork.routes.length} corridors, ${Object.keys(activeNetwork.ports).length} ports)`;
-
-  // Render Routes Table
-  const tbody = document.getElementById('tbody-net-routes');
-  tbody.innerHTML = '';
-  activeNetwork.routes.forEach((r, idx) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><b>${r.route_id}</b></td>
-      <td>${activeNetwork.ports[r.origin]?.name || r.origin}</td>
-      <td>${activeNetwork.ports[r.destination]?.name || r.destination}</td>
-      <td><b>${fmtNum(r.distance_nm)} nm</b></td>
-      <td>${fmtNum(r.annual_demand_teu)} TEU/yr</td>
-      <td><span class="badge badge-navy">${r.sea_condition_factor}</span></td>
-      <td><button class="btn btn-outline" style="padding: 0.2rem 0.6rem; color: var(--red);" onclick="deleteRoute(${idx})">Delete</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-
-  // Render Plotly Network Map
-  renderNetworkMap();
-}
-
-window.deleteRoute = function(idx) {
-  activeNetwork.routes.splice(idx, 1);
-  renderNetworkUI();
-};
-
-function renderNetworkMap() {
-  const portLats = [], portLons = [], portTexts = [];
-  Object.values(activeNetwork.ports || {}).forEach(p => {
-    portLats.push(p.lat);
-    portLons.push(p.lon);
-    portTexts.push(`<b>${p.name}</b><br>Shore Power: ${p.has_shore_power ? 'Yes' : 'No'}`);
-  });
-
-  const traces = [];
-  
-  // Routes lines
-  activeNetwork.routes.forEach(r => {
-    const p1 = activeNetwork.ports[r.origin];
-    const p2 = activeNetwork.ports[r.destination];
-    if (p1 && p2) {
-      traces.push({
-        type: 'scattergeo',
-        mode: 'lines',
-        lat: [p1.lat, p2.lat],
-        lon: [p1.lon, p2.lon],
-        line: { width: 2.5, color: '#0d9488' },
-        hoverinfo: 'text',
-        hovertext: `${r.name || r.route_id}<br>${r.distance_nm} nm (${fmtNum(r.annual_demand_teu)} TEU)`
-      });
-    }
-  });
-
-  // Ports markers
-  traces.push({
-    type: 'scattergeo',
-    mode: 'markers+text',
-    lat: portLats,
-    lon: portLons,
-    text: Object.values(activeNetwork.ports || {}).map(p => p.name),
-    textposition: 'top right',
-    hoverinfo: 'text',
-    hovertext: portTexts,
-    marker: { size: 10, color: '#0f4c81', symbol: 'circle', line: { color: '#ffffff', width: 2 } }
-  });
-
-  const layout = {
-    geo: {
-      projection: { type: 'equirectangular' },
-      showland: true,
-      landcolor: '#e2e8f0',
-      oceancolor: '#f8fafc',
-      showocean: true,
-      coastlinecolor: '#94a3b8',
-      center: { lat: 15.0, lon: 80.0 },
-      zoom: 2.5
-    },
-    margin: { t: 10, b: 10, l: 10, r: 10 },
-    showlegend: false,
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { family: 'Inter, sans-serif' }
-  };
-
-  Plotly.newPlot('chart-network-map', traces, layout, { responsive: true, displayModeBar: false });
 }
 
 // Initial Load
