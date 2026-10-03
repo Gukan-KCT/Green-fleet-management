@@ -136,12 +136,14 @@ def get_system_config():
     return clean_json(load_config())
  
 @app.get("/api/ports-catalog")
+@app.get("/api/network-catalog")
 def get_ports_catalog():
     """Returns the catalog of 20+ real-world global maritime ports and demo network defaults."""
     catalog = load_ports_catalog()
     demo_net = get_demo_network()
     return clean_json({
         "catalog": catalog,
+        "catalog_ports": catalog,
         "demo_network": demo_net.model_dump(),
     })
 

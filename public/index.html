@@ -1466,45 +1466,105 @@ function renderPlanner(data) {
 }
 
 // ================= NETWORK BUILDER LOGIC =================
-let networkPorts = {};
-let networkRoutes = [];
-let catalogPorts = [];
+const DEFAULT_DEMO_PORTS = {
+  "Port of Nhava Sheva (Mumbai)": { name: "Port of Nhava Sheva (Mumbai)", lat: 18.95, lon: 72.95, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG", "Methanol"] },
+  "Port of Kochi": { name: "Port of Kochi", lat: 9.97, lon: 76.28, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG"] },
+  "V.O. Chidambaranar Port (Tuticorin)": { name: "V.O. Chidambaranar Port (Tuticorin)", lat: 8.76, lon: 78.13, shore_power_available: false, bunkering_fuels: ["HFO", "MGO"] },
+  "Chennai Port": { name: "Chennai Port", lat: 13.08, lon: 80.29, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG", "Methanol"] },
+  "Port of Colombo": { name: "Port of Colombo", lat: 6.94, lon: 79.84, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG"] },
+  "Port of Chittagong": { name: "Port of Chittagong", lat: 22.32, lon: 91.81, shore_power_available: false, bunkering_fuels: ["HFO", "MGO"] }
+};
+
+const DEFAULT_DEMO_ROUTES = [
+  { route_id: "R1", name: "Mumbai - Kochi", origin: "Port of Nhava Sheva (Mumbai)", destination: "Port of Kochi", distance_nm: 580, annual_demand_teu: 120000, sea_margin: 0.30 },
+  { route_id: "R2", name: "Kochi - Tuticorin", origin: "Port of Kochi", destination: "V.O. Chidambaranar Port (Tuticorin)", distance_nm: 190, annual_demand_teu: 80000, sea_margin: 0.25 },
+  { route_id: "R3", name: "Tuticorin - Colombo", origin: "V.O. Chidambaranar Port (Tuticorin)", destination: "Port of Colombo", distance_nm: 150, annual_demand_teu: 95000, sea_margin: 0.20 },
+  { route_id: "R4", name: "Colombo - Chennai", origin: "Port of Colombo", destination: "Chennai Port", distance_nm: 390, annual_demand_teu: 110000, sea_margin: 0.30 },
+  { route_id: "R5", name: "Chennai - Chittagong", origin: "Chennai Port", destination: "Port of Chittagong", distance_nm: 890, annual_demand_teu: 135000, sea_margin: 0.35 }
+];
+
+const DEFAULT_CATALOG_PORTS = [
+  { name: "Port of Nhava Sheva (Mumbai)", lat: 18.95, lon: 72.95 },
+  { name: "Port of Kochi", lat: 9.97, lon: 76.28 },
+  { name: "V.O. Chidambaranar Port (Tuticorin)", lat: 8.76, lon: 78.13 },
+  { name: "Chennai Port", lat: 13.08, lon: 80.29 },
+  { name: "Port of Colombo", lat: 6.94, lon: 79.84 },
+  { name: "Port of Chittagong", lat: 22.32, lon: 91.81 },
+  { name: "Port of Singapore", lat: 1.29, lon: 103.85 },
+  { name: "Port of Shanghai", lat: 31.23, lon: 121.47 },
+  { name: "Port of Rotterdam", lat: 51.92, lon: 4.48 },
+  { name: "Port of Jebel Ali (Dubai)", lat: 25.01, lon: 55.06 },
+  { name: "Port of Busan", lat: 35.10, lon: 129.04 },
+  { name: "Port of Antwerp", lat: 51.22, lon: 4.40 },
+  { name: "Port of Ningbo-Zhoushan", lat: 29.87, lon: 121.55 },
+  { name: "Port of Guangzhou", lat: 23.13, lon: 113.26 },
+  { name: "Port of Qingdao", lat: 36.07, lon: 120.38 },
+  { name: "Port of Tianjin", lat: 39.12, lon: 117.20 },
+  { name: "Port of Hong Kong", lat: 22.32, lon: 114.17 },
+  { name: "Port of Hamburg", lat: 53.55, lon: 9.99 },
+  { name: "Port of Los Angeles", lat: 33.74, lon: -118.27 },
+  { name: "Port of Long Beach", lat: 33.77, lon: -118.19 },
+  { name: "Port of New York & New Jersey", lat: 40.67, lon: -74.12 }
+];
+
+let networkPorts = { ...DEFAULT_DEMO_PORTS };
+let networkRoutes = [...DEFAULT_DEMO_ROUTES];
+let catalogPorts = [...DEFAULT_CATALOG_PORTS];
 let networkInitialized = false;
 
+function computeClientHaversine(lat1, lon1, lat2, lon2, detour = 1.15) {
+  const R = 3440.065; // Nautical miles radius
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * detour * 10) / 10;
+}
+
 async function loadNetwork() {
+  populateCatalogDropdown();
+  renderNetworkUI();
+
   if (!networkInitialized) {
     await fetchCatalogAndInit();
     networkInitialized = true;
   }
 }
 
+function populateCatalogDropdown() {
+  const catSelect = document.getElementById('net-catalog-select');
+  if (catSelect) {
+    catSelect.innerHTML = '';
+    catalogPorts.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = `${p.name} (${Number(p.lat).toFixed(2)}, ${Number(p.lon).toFixed(2)})`;
+      catSelect.appendChild(opt);
+    });
+  }
+}
+
 async function fetchCatalogAndInit() {
   try {
-    const res = await fetch('/api/network-catalog');
-    const data = await res.json();
-    catalogPorts = data.catalog_ports || [];
-    
-    // Populate catalog select dropdown
-    const catSelect = document.getElementById('net-catalog-select');
-    if (catSelect) {
-      catSelect.innerHTML = '';
-      catalogPorts.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.name;
-        opt.textContent = `${p.name} (${p.lat.toFixed(2)}, ${p.lon.toFixed(2)})`;
-        catSelect.appendChild(opt);
-      });
+    let res = await fetch('/api/ports-catalog');
+    if (!res.ok) res = await fetch('/api/network-catalog');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.catalog || data.catalog_ports) {
+        catalogPorts = data.catalog || data.catalog_ports;
+        populateCatalogDropdown();
+      }
+      if (data.demo_network && data.demo_network.ports) {
+        networkPorts = { ...data.demo_network.ports };
+        networkRoutes = [...(data.demo_network.routes || DEFAULT_DEMO_ROUTES)];
+      }
     }
-
-    // Set demo network
-    const demo = data.demo_network || {};
-    networkPorts = { ...(demo.ports || {}) };
-    networkRoutes = [...(demo.routes || [])];
-
-    renderNetworkUI();
   } catch (err) {
-    console.error('Failed to load network catalog:', err);
+    console.warn('API catalog fetch failed, using built-in defaults:', err);
   }
+  renderNetworkUI();
 }
 
 function updatePortDropdowns() {
@@ -1518,25 +1578,38 @@ function updatePortDropdowns() {
   oSel.innerHTML = '';
   dSel.innerHTML = '';
 
+  const portKeys = Object.keys(networkPorts);
+  if (portKeys.length === 0) {
+    networkPorts = { ...DEFAULT_DEMO_PORTS };
+  }
+
   const portNames = Object.keys(networkPorts).sort();
-  portNames.forEach((pName, idx) => {
+  portNames.forEach((pName) => {
     const p = networkPorts[pName];
     const optO = document.createElement('option');
     optO.value = pName;
-    optO.textContent = `${p.name} [${p.lat}, ${p.lon}]`;
+    optO.textContent = `${p.name || pName} [${p.lat}, ${p.lon}]`;
     oSel.appendChild(optO);
 
     const optD = document.createElement('option');
     optD.value = pName;
-    optD.textContent = `${p.name} [${p.lat}, ${p.lon}]`;
+    optD.textContent = `${p.name || pName} [${p.lat}, ${p.lon}]`;
     dSel.appendChild(optD);
   });
 
-  if (portNames.includes(currentO)) oSel.value = currentO;
-  else if (portNames.length > 0) oSel.value = portNames[0];
+  if (currentO && portNames.includes(currentO)) {
+    oSel.value = currentO;
+  } else if (portNames.length > 0) {
+    oSel.value = portNames[0];
+  }
 
-  if (portNames.includes(currentD)) dSel.value = currentD;
-  else if (portNames.length > 1) dSel.value = portNames[1];
+  if (currentD && portNames.includes(currentD)) {
+    dSel.value = currentD;
+  } else if (portNames.length > 1) {
+    dSel.value = portNames[1];
+  } else if (portNames.length > 0) {
+    dSel.value = portNames[0];
+  }
 
   calculateNetworkDistance();
 }
@@ -1549,17 +1622,23 @@ async function calculateNetworkDistance() {
 
   const p1 = networkPorts[oSel.value];
   const p2 = networkPorts[dSel.value];
-  if (!p1 || !p2 || p1.name === p2.name) {
+  if (!p1 || !p2 || oSel.value === dSel.value) {
     distInput.value = 0;
     return;
   }
 
+  // Fast client-side calculation first
+  const localDist = computeClientHaversine(p1.lat, p1.lon, p2.lat, p2.lon, 1.15);
+  distInput.value = localDist;
+
   try {
     const res = await fetch(`/api/calculate-distance?lat1=${p1.lat}&lon1=${p1.lon}&lat2=${p2.lat}&lon2=${p2.lon}&detour_factor=1.15`);
-    const data = await res.json();
-    distInput.value = data.distance_nm || 0;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.distance_nm) distInput.value = data.distance_nm;
+    }
   } catch (err) {
-    console.error('Failed to calculate distance:', err);
+    // Already set via computeClientHaversine
   }
 }
 
@@ -2133,6 +2212,7 @@ async function loadCaseStudy() {
 
 // Initial Load
 fetchPlannerData();
+loadNetwork();
 
 </script>
 </body>
