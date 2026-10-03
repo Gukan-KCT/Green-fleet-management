@@ -1,0 +1,323 @@
+# ==============================================================================
+# Quantum-Inspired Green Fleet Management Platform - System Configuration
+# ==============================================================================
+# DISCLAIMER: All physical, economic, and operational values in this configuration
+# are illustrative synthetic parameters for the Phase-1 prototype demonstration.
+# Verify against primary sources, classification societies, and official IMO
+# regulatory frameworks before real-world operational use.
+# ==============================================================================
+
+meta:
+  version: "1.0.0"
+  status: "illustrative_prototype"
+  disclaimer: "All values are illustrative and synthetic for Phase-1 prototype demonstration. Verify against primary sources before real use."
+
+general:
+  random_seed: 42
+  days_per_year: 350.0                  # Standard commercial operating days per vessel per year
+  carbon_price_usd_per_tonne: 80.0      # Illustrative global/regional carbon tax ($/t CO2e)
+  weather_penalty_k_w: 0.35             # Sensitivity factor k_w in weather multiplier (1 + k_w * weather_severity)
+  hours_per_day: 24.0
+
+vessel_types:
+  small_feeder:
+    name: "Small Feeder (1,000 TEU)"
+    capacity_teu: 1000
+    capacity_dwt: 12000.0               # Deadweight tonnage (tonnes)
+    lightship_tonnes: 4500.0            # Lightship weight without cargo/fuel
+    l_ref_tonnes: 9000.0                # Reference cargo load for design rating
+    v_min_knots: 10.0                   # Minimum speed to prevent engine fouling/stall
+    v_max_knots: 16.0                   # Maximum continuous rating speed
+    v_ref_knots: 13.5                   # Design service reference speed
+    f_ref_tonnes_day: 18.0              # Reference fuel burn per sea day at V_ref and L_ref
+    daily_charter_usd: 14000.0          # Daily time charter equivalent / capital amortized cost
+    aux_kw_berth: 400.0                 # Auxiliary generator hoteling/cooling load in port (kW)
+    fleet_available: 8                  # Maximum vessels available in operator fleet
+    description: "Short-sea shallow-draft feeder suited for secondary hub-and-spoke links."
+
+  handymax_feeder:
+    name: "Handymax Feeder (1,800 TEU)"
+    capacity_teu: 1800
+    capacity_dwt: 22000.0
+    lightship_tonnes: 7500.0
+    l_ref_tonnes: 16000.0
+    v_min_knots: 11.0
+    v_max_knots: 18.0
+    v_ref_knots: 15.0
+    f_ref_tonnes_day: 28.0
+    daily_charter_usd: 21000.0
+    aux_kw_berth: 650.0
+    fleet_available: 6
+    description: "Versatile regional feeder balancing slot capacity and bunker economy."
+
+  sub_panamax_feeder:
+    name: "Sub-Panamax Feeder (2,800 TEU)"
+    capacity_teu: 2800
+    capacity_dwt: 35000.0
+    lightship_tonnes: 11000.0
+    l_ref_tonnes: 26000.0
+    v_min_knots: 12.0
+    v_max_knots: 20.0
+    v_ref_knots: 16.5
+    f_ref_tonnes_day: 42.0
+    daily_charter_usd: 29000.0
+    aux_kw_berth: 900.0
+    fleet_available: 6
+    description: "High-capacity corridor feeder connecting major transshipment hubs."
+
+  panamax_feeder:
+    name: "Panamax Feeder (4,200 TEU)"
+    capacity_teu: 4200
+    capacity_dwt: 52000.0
+    lightship_tonnes: 16000.0
+    l_ref_tonnes: 40000.0
+    v_min_knots: 13.0
+    v_max_knots: 22.0
+    v_ref_knots: 18.0
+    f_ref_tonnes_day: 62.0
+    daily_charter_usd: 38000.0
+    aux_kw_berth: 1200.0
+    fleet_available: 4
+    description: "Trunk-line feeder capable of rapid heavy-cargo transit on high-volume lanes."
+
+fuels:
+  HFO:
+    name: "Heavy Fuel Oil (HFO)"
+    is_conventional: true
+    lhv_mj_kg: 40.2                     # Lower Heating Value (MJ/kg)
+    engine_efficiency_ratio: 1.0        # Thermal efficiency relative to baseline 2-stroke diesel
+    ef_tank_to_wake: 3.114              # Tank-to-Wake CO2e per tonne fuel (IMO standard proxy)
+    ef_well_to_tank:
+      default: 0.58                     # Extraction, refining, logistics
+    price_usd_per_tonne:
+      default: 550.0
+    capacity_penalty_pct: 0.0           # Baseline tank volume
+    slip_factor_co2e_per_tonne: 0.0     # Unburned hydrocarbon slip penalty
+    pathways: ["fossil"]
+    default_pathway: "fossil"
+
+  MGO:
+    name: "Marine Gas Oil (MGO)"
+    is_conventional: true
+    lhv_mj_kg: 42.7
+    engine_efficiency_ratio: 1.0
+    ef_tank_to_wake: 3.206
+    ef_well_to_tank:
+      default: 0.65
+    price_usd_per_tonne:
+      default: 780.0
+    capacity_penalty_pct: 0.0
+    slip_factor_co2e_per_tonne: 0.0
+    pathways: ["fossil"]
+    default_pathway: "fossil"
+
+  LNG:
+    name: "Liquefied Natural Gas (LNG)"
+    is_conventional: false
+    lhv_mj_kg: 48.0
+    engine_efficiency_ratio: 1.03       # Lean burn Otto cycle thermal efficiency
+    ef_tank_to_wake: 2.750
+    ef_well_to_tank:
+      default: 0.82
+    price_usd_per_tonne:
+      default: 720.0
+    capacity_penalty_pct: 3.0           # Cryogenic tank space loss
+    slip_factor_co2e_per_tonne: 0.15    # Methane slip in CO2e equivalent
+    pathways: ["fossil"]
+    default_pathway: "fossil"
+
+  Methanol:
+    name: "Methanol (CH3OH)"
+    is_conventional: false
+    lhv_mj_kg: 19.9
+    engine_efficiency_ratio: 1.02
+    ef_tank_to_wake: 1.375
+    ef_well_to_tank:
+      grey: 2.10                        # Natural gas steam reforming
+      blue: 0.85                        # With carbon capture & storage
+      green: 0.15                       # Biogenic or renewable e-methanol
+    price_usd_per_tonne:
+      grey: 480.0
+      blue: 750.0
+      green: 980.0
+    capacity_penalty_pct: 5.0           # Lower energy density requires larger bunkering tanks
+    slip_factor_co2e_per_tonne: 0.0
+    pathways: ["grey", "blue", "green"]
+    default_pathway: "green"
+
+  Ammonia:
+    name: "Ammonia (NH3)"
+    is_conventional: false
+    lhv_mj_kg: 18.6
+    engine_efficiency_ratio: 0.98
+    ef_tank_to_wake: 0.0                # Zero carbon tailpipe
+    ef_well_to_tank:
+      grey: 2.60                        # Haber-Bosch via fossil gas
+      blue: 0.95                        # Blue Haber-Bosch with CCS
+      green: 0.10                       # Green hydrogen Haber-Bosch
+    price_usd_per_tonne:
+      grey: 520.0
+      blue: 790.0
+      green: 1100.0
+    capacity_penalty_pct: 9.0           # Pressurized/refrigerated storage penalty
+    slip_factor_co2e_per_tonne: 0.18    # N2O combustion slip penalty
+    pathways: ["grey", "blue", "green"]
+    default_pathway: "green"
+
+  Hydrogen:
+    name: "Liquid Hydrogen (LH2)"
+    is_conventional: false
+    lhv_mj_kg: 120.0
+    engine_efficiency_ratio: 1.15       # High efficiency PEM/SOFC or dual-fuel ICE
+    ef_tank_to_wake: 0.0                # Zero tailpipe emissions
+    ef_well_to_tank:
+      grey: 11.50                       # Steam methane reforming
+      blue: 3.20                        # Blue SMR + CCS
+      green: 0.50                       # Electrolysis via renewable electricity
+    price_usd_per_tonne:
+      grey: 3200.0
+      blue: 4800.0
+      green: 6500.0
+    capacity_penalty_pct: 14.0          # Vacuum-insulated cryogenic insulation loss
+    slip_factor_co2e_per_tonne: 0.0
+    pathways: ["grey", "blue", "green"]
+    default_pathway: "green"
+
+ports:
+  mumbai:
+    name: "Port of Nhava Sheva (Mumbai)"
+    country: "India"
+    has_shore_power: true
+    grid_ef_tonnes_per_mwh: 0.71        # Regional grid emission factor
+    electricity_price_usd_per_mwh: 120.0
+    port_call_fee_usd: 8500.0
+    berth_hours_avg: 24.0
+    supported_fuels: ["HFO", "MGO", "LNG", "Methanol"]
+
+  kochi:
+    name: "Port of Kochi"
+    country: "India"
+    has_shore_power: true
+    grid_ef_tonnes_per_mwh: 0.65
+    electricity_price_usd_per_mwh: 115.0
+    port_call_fee_usd: 6200.0
+    berth_hours_avg: 20.0
+    supported_fuels: ["HFO", "MGO", "LNG"]
+
+  tuticorin:
+    name: "V.O. Chidambaranar Port (Tuticorin)"
+    country: "India"
+    has_shore_power: false
+    grid_ef_tonnes_per_mwh: 0.70
+    electricity_price_usd_per_mwh: 125.0
+    port_call_fee_usd: 5400.0
+    berth_hours_avg: 18.0
+    supported_fuels: ["HFO", "MGO"]
+
+  chennai:
+    name: "Chennai Port"
+    country: "India"
+    has_shore_power: true
+    grid_ef_tonnes_per_mwh: 0.68
+    electricity_price_usd_per_mwh: 118.0
+    port_call_fee_usd: 7800.0
+    berth_hours_avg: 22.0
+    supported_fuels: ["HFO", "MGO", "LNG", "Methanol"]
+
+  colombo:
+    name: "Port of Colombo"
+    country: "Sri Lanka"
+    has_shore_power: true
+    grid_ef_tonnes_per_mwh: 0.58
+    electricity_price_usd_per_mwh: 140.0
+    port_call_fee_usd: 9200.0
+    berth_hours_avg: 26.0
+    supported_fuels: ["HFO", "MGO", "LNG", "Methanol", "Ammonia"]
+
+  singapore:
+    name: "Port of Singapore"
+    country: "Singapore"
+    has_shore_power: true
+    grid_ef_tonnes_per_mwh: 0.41
+    electricity_price_usd_per_mwh: 155.0
+    port_call_fee_usd: 11500.0
+    berth_hours_avg: 20.0
+    supported_fuels: ["HFO", "MGO", "LNG", "Methanol", "Ammonia", "Hydrogen"]
+
+routes:
+  R1:
+    id: "R1"
+    name: "Nhava Sheva - Colombo"
+    origin: "mumbai"
+    destination: "colombo"
+    distance_nm: 890.0
+    annual_demand_teu: 140000
+    min_sailings_per_week: 1.0
+    weather_severity: 0.32
+    speed_cap_knots: 17.0
+
+  R2:
+    id: "R2"
+    name: "Kochi - Colombo"
+    origin: "kochi"
+    destination: "colombo"
+    distance_nm: 360.0
+    annual_demand_teu: 85000
+    min_sailings_per_week: 1.5
+    weather_severity: 0.25
+    speed_cap_knots: 16.0
+
+  R3:
+    id: "R3"
+    name: "Chennai - Colombo"
+    origin: "chennai"
+    destination: "colombo"
+    distance_nm: 610.0
+    annual_demand_teu: 110000
+    min_sailings_per_week: 1.0
+    weather_severity: 0.28
+    speed_cap_knots: 17.0
+
+  R4:
+    id: "R4"
+    name: "Tuticorin - Colombo"
+    origin: "tuticorin"
+    destination: "colombo"
+    distance_nm: 160.0
+    annual_demand_teu: 65000
+    min_sailings_per_week: 2.0
+    weather_severity: 0.20
+    speed_cap_knots: 15.0
+
+  R5:
+    id: "R5"
+    name: "Colombo - Singapore"
+    origin: "colombo"
+    destination: "singapore"
+    distance_nm: 1580.0
+    annual_demand_teu: 220000
+    min_sailings_per_week: 1.0
+    weather_severity: 0.40
+    speed_cap_knots: 18.0
+
+optimization:
+  population_size: 25
+  generations: 35
+  rotation_angle_rad: 0.05
+  mutation_rate: 0.02
+  migration_interval: 10
+  random_seed: 42
+  penalty_weight_large: 10000.0
+  default_weights:
+    fuel: 0.30
+    cost: 0.40
+    emissions: 0.30
+  speed_levels_count: 8
+  max_vessels_per_option: 4
+  carbon_intensity_cap_g_per_tonne_nm: 18.0 # Simplified proxy cap (gCO2e / t-nm)
+  reliability_min_threshold: 0.70
+
+large_scale:
+  num_routes: 24
+  num_vessel_options: 8
+  random_seed: 123

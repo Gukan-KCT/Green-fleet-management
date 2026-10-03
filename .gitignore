@@ -1,0 +1,28 @@
+# Virtual environment
+venv/
+.venv/
+env/
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Pytest & testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Output artifacts & cache
+data/saved_*.json
+data/saved_*.pkl
+.streamlit/
+*.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
