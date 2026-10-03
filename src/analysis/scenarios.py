@@ -148,6 +148,7 @@ def run_all_preset_scenarios(
     for name in PRESET_SCENARIOS.keys():
         res = evaluate_scenario(
             scenario_name=name,
+            params_override=None,
             pop_size=pop_size,
             generations=generations,
             random_seed=random_seed,

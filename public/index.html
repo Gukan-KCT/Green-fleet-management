@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Green Fleet | Maritime Logistics & Decarbonization Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <!-- Plotly CDN for interactive charts -->
+  <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+</head>
+<body>
+
+  <!-- Left Sidebar Navigation -->
+  <aside class="app-sidebar">
+    <div class="brand-header">
+      <div class="brand-logo">🚢</div>
+      <div class="brand-title">
+        <h1>Green Fleet</h1>
+        <p>Decarbonization Engine</p>
+      </div>
+    </div>
+
+    <nav class="nav-menu">
+      <a class="nav-item active" data-page="planner">
+        <span class="nav-icon">🗺️</span> Fleet Planner
+      </a>
+      <a class="nav-item" data-page="predictor">
+        <span class="nav-icon">⛽</span> Fuel Predictor
+      </a>
+      <a class="nav-item" data-page="fuels">
+        <span class="nav-icon">🌱</span> Alternative Fuels
+      </a>
+      <a class="nav-item" data-page="shore">
+        <span class="nav-icon">🔌</span> Shore Power
+      </a>
+      <a class="nav-item" data-page="scenarios">
+        <span class="nav-icon">🔮</span> Scenario Manager
+      </a>
+      <a class="nav-item" data-page="benchmark">
+        <span class="nav-icon">⚡</span> Algorithm Benchmark
+      </a>
+      <a class="nav-item" data-page="casestudy">
+        <span class="nav-icon">📑</span> Case Study
+      </a>
+      <a class="nav-item" data-page="about">
+        <span class="nav-icon">📖</span> Methodology & Physics
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span>Vercel Serverless Ready</span>
+      <span>v2.0</span>
+    </div>
+  </aside>
+
+  <!-- Main Application Workspace -->
+  <main class="app-main">
+    <header class="top-bar">
+      <div class="page-title">
+        <h2 id="view-title">Fleet Planner</h2>
+        <p id="view-subtitle">Multi-objective quantum-inspired fleet deployment workspace</p>
+      </div>
+      <div class="badge-group">
+        <span class="badge badge-amber">◆ Synthetic Prototype</span>
+        <span class="badge badge-navy">■ Classical CPU</span>
+      </div>
+    </header>
+
+    <div class="content-viewport" id="content-area">
+
+      <!-- ================= 1. FLEET PLANNER VIEW ================= -->
+      <section id="page-planner" class="view-panel active">
+        <!-- Presets Row -->
+        <div class="card" style="padding: 0.85rem 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <div class="btn-group">
+              <span style="font-size: 0.8rem; font-weight: 600; color: var(--slate-600); align-self: center; margin-right: 0.25rem;">Presets:</span>
+              <button class="btn btn-outline preset-btn" data-preset="balanced">Balanced (0.2/0.4/0.4)</button>
+              <button class="btn btn-outline preset-btn" data-preset="min_cost">Min Cost</button>
+              <button class="btn btn-outline preset-btn" data-preset="min_emiss">Min CO2e</button>
+              <button class="btn btn-outline preset-btn" data-preset="min_fuel">Min Fuel</button>
+            </div>
+            <button class="btn btn-primary" id="run-opt-btn">▶ Run Optimization</button>
+          </div>
+        </div>
+
+        <!-- Controls Card -->
+        <div class="card">
+          <div class="controls-row">
+            <div class="form-group">
+              <label>Fuel Weight: <span id="val-w-fuel">20</span>%</label>
+              <input type="range" class="form-control" id="range-w-fuel" min="0" max="100" value="20">
+            </div>
+            <div class="form-group">
+              <label>Cost Weight: <span id="val-w-cost">40</span>%</label>
+              <input type="range" class="form-control" id="range-w-cost" min="0" max="100" value="40">
+            </div>
+            <div class="form-group">
+              <label>Emissions Weight: <span id="val-w-emiss">40</span>%</label>
+              <input type="range" class="form-control" id="range-w-emiss" min="0" max="100" value="40">
+            </div>
+            <div class="form-group">
+              <label>Speed Cap (knots)</label>
+              <input type="number" class="form-control" id="input-speed-cap" value="18.0" step="0.5" min="10" max="25">
+            </div>
+          </div>
+        </div>
+
+        <!-- KPIs Row -->
+        <div class="kpi-grid" id="planner-kpis">
+          <div class="kpi-card">
+            <div class="kpi-label">Total Fuel Burn</div>
+            <div class="kpi-value" id="kpi-fuel">-</div>
+            <div class="kpi-delta good" id="delta-fuel">Loading...</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Operating Cost</div>
+            <div class="kpi-value" id="kpi-cost">-</div>
+            <div class="kpi-delta good" id="delta-cost">Loading...</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Lifecycle CO2e</div>
+            <div class="kpi-value" id="kpi-emiss">-</div>
+            <div class="kpi-delta good" id="delta-emiss">Loading...</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Carbon Intensity</div>
+            <div class="kpi-value" id="kpi-ci">-</div>
+            <div class="kpi-delta good" id="delta-ci">Loading...</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Cargo Delivered</div>
+            <div class="kpi-value" id="kpi-cargo">-</div>
+            <div class="kpi-delta" style="color: var(--slate-500);">Annual Target Met</div>
+          </div>
+        </div>
+
+        <!-- Analytical Charts Row -->
+        <div class="charts-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Fleet Allocation by Corridor</div>
+              <div class="card-subtitle">Vessel count deployed per route</div>
+            </div>
+            <div id="chart-alloc" class="chart-container"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Lifecycle GHG Emissions (t CO2e)</div>
+              <div class="card-subtitle">Tank-to-Wake, Well-to-Tank, Berth</div>
+            </div>
+            <div id="chart-emiss" class="chart-container"></div>
+          </div>
+        </div>
+
+        <!-- Route Allocation Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Corridor Deployment & Oversupply Metrics</div>
+            <div class="card-subtitle">Monitors slot capacity versus true cargo demand</div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="table-routes">
+              <thead>
+                <tr>
+                  <th>Corridor</th>
+                  <th>Route Name</th>
+                  <th>Origin - Dest</th>
+                  <th>Fleet</th>
+                  <th>Bunker Fuel</th>
+                  <th>Speed</th>
+                  <th>Demand (TEU)</th>
+                  <th>Capacity (TEU)</th>
+                  <th>Oversupply</th>
+                  <th>Reliability</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="10" style="text-align: center; color: var(--slate-400);">Loading route data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 2. FUEL PREDICTOR VIEW ================= -->
+      <section id="page-predictor" class="view-panel" style="display: none;">
+        <div class="card">
+          <div class="controls-row">
+            <div class="form-group">
+              <label>Vessel Class</label>
+              <select class="form-control" id="pred-vessel">
+                <option value="handymax_feeder" selected>Handymax Feeder (1,800 TEU)</option>
+                <option value="small_feeder">Small Feeder (1,000 TEU)</option>
+                <option value="sub_panamax_feeder">Sub-Panamax Feeder (2,500 TEU)</option>
+                <option value="panamax">Panamax (4,500 TEU)</option>
+                <option value="post_panamax">Post-Panamax (8,000 TEU)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Speed: <span id="pred-speed-val">14.0</span> knots</label>
+              <input type="range" class="form-control" id="pred-speed" min="10" max="22" step="0.5" value="14.0">
+            </div>
+            <div class="form-group">
+              <label>Cargo Load: <span id="pred-load-val">80</span>%</label>
+              <input type="range" class="form-control" id="pred-load" min="20" max="100" step="5" value="80">
+            </div>
+            <div class="form-group">
+              <label>Distance (nm)</label>
+              <input type="number" class="form-control" id="pred-dist" value="890">
+            </div>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Leg Fuel Burn</div>
+            <div class="kpi-value" id="pred-res-fuel">-</div>
+            <div class="kpi-delta" style="color: var(--primary);">Conventional HFO</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Voyage Cost</div>
+            <div class="kpi-value" id="pred-res-cost">-</div>
+            <div class="kpi-delta" style="color: var(--primary);">Bunker + Carbon Tax</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Emissions CO2e</div>
+            <div class="kpi-value" id="pred-res-emiss">-</div>
+            <div class="kpi-delta" style="color: var(--teal);">Well-to-Wake</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Transit Time</div>
+            <div class="kpi-value" id="pred-res-days">-</div>
+            <div class="kpi-delta" style="color: var(--slate-500);">Sea passage duration</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Cubic Propulsion Power Speed Curve</div>
+            <div class="card-subtitle">Admiralty coefficient hydrodynamic resistance scaling</div>
+          </div>
+          <div id="chart-speed-sweep" class="chart-container"></div>
+        </div>
+      </section>
+
+      <!-- ================= 3. ALTERNATIVE FUELS VIEW ================= -->
+      <section id="page-fuels" class="view-panel" style="display: none;">
+        <div class="card">
+          <div class="controls-row">
+            <div class="form-group">
+              <label>Vessel Archetype</label>
+              <select class="form-control" id="fuel-vessel">
+                <option value="handymax_feeder">Handymax Feeder</option>
+                <option value="small_feeder">Small Feeder</option>
+                <option value="sub_panamax_feeder">Sub-Panamax</option>
+                <option value="panamax">Panamax</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Route Corridor</label>
+              <select class="form-control" id="fuel-route">
+                <option value="R1">R1: Nhava Sheva - Colombo (890 nm)</option>
+                <option value="R2">R2: Chennai - Singapore (1,580 nm)</option>
+                <option value="R3">R3: Mundra - Kochi (720 nm)</option>
+                <option value="R4">R4: Kolkata - Chittagong (450 nm)</option>
+                <option value="R5">R5: Tuticorin - Colombo (180 nm)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Upstream Feedstock Pathway</label>
+              <select class="form-control" id="fuel-pathway">
+                <option value="green" selected>Green (Electrolysis / E-Fuels)</option>
+                <option value="blue">Blue (Fossil + Carbon Capture)</option>
+                <option value="grey">Grey (Unabated Fossil)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Voyage Bunkering Procurement Cost ($)</div>
+            </div>
+            <div id="chart-fuel-cost" class="chart-container"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Lifecycle Well-to-Wake Emissions (t CO2e)</div>
+            </div>
+            <div id="chart-fuel-ghg" class="chart-container"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Techno-Economic Fuel Matrix</div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="table-fuels">
+              <thead>
+                <tr>
+                  <th>Fuel Type</th>
+                  <th>Pathway</th>
+                  <th>Bunker Mass (t)</th>
+                  <th>Voyage Cost ($)</th>
+                  <th>Lifecycle CO2e (t)</th>
+                  <th>Cargo Loss (%)</th>
+                  <th>Usable TEU</th>
+                  <th>Feasible</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 4. SHORE POWER VIEW ================= -->
+      <section id="page-shore" class="view-panel" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Port Cold-Ironing Terminal Grid Analysis</div>
+            <div class="card-subtitle">Auxiliary diesel generator displacement vs municipal grid factor</div>
+          </div>
+          <div id="chart-shore-emiss" class="chart-container"></div>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table" id="table-shore">
+              <thead>
+                <tr>
+                  <th>Port</th>
+                  <th>Cold Ironing Ready</th>
+                  <th>Grid EF (t/MWh)</th>
+                  <th>Electricity Tariff ($/MWh)</th>
+                  <th>CO2e Displaced (t/yr)</th>
+                  <th>Net Cost Impact ($/yr)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 5. SCENARIOS VIEW ================= -->
+      <section id="page-scenarios" class="view-panel" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Regulatory, Economic & Climate Stress Tests</div>
+            <div class="card-subtitle">Side-by-side policy simulation across 6 standard stress contingencies</div>
+          </div>
+          <div id="chart-scenarios" class="chart-container" style="height: 400px;"></div>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table" id="table-scenarios">
+              <thead>
+                <tr>
+                  <th>Scenario</th>
+                  <th>Operating Cost ($)</th>
+                  <th>Emissions (t CO2e)</th>
+                  <th>Fuel Burn (t)</th>
+                  <th>Carbon Intensity (g/t-nm)</th>
+                  <th>Feasible</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 6. BENCHMARK VIEW ================= -->
+      <section id="page-benchmark" class="view-panel" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Algorithmic Optimization Convergence (10 Random Seeds)</div>
+            <div class="card-subtitle">QIEA vs Canonical GA vs Continuous-to-Binary PSO vs Random Search</div>
+          </div>
+          <div id="chart-benchmark" class="chart-container" style="height: 380px;"></div>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table" id="table-benchmark">
+              <thead>
+                <tr>
+                  <th>Algorithm</th>
+                  <th>Best Fitness</th>
+                  <th>Mean Fitness</th>
+                  <th>Std Dev</th>
+                  <th>Feasibility Rate (%)</th>
+                  <th>Runtime (s)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 7. CASE STUDY VIEW ================= -->
+      <section id="page-casestudy" class="view-panel" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">South Asian Feeder Corridor Decarbonization Case Study</div>
+            <div class="card-subtitle">5-route regional network benchmarking against Naive & Conventional baselines</div>
+          </div>
+          <div class="kpi-grid" id="casestudy-kpis"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Dual-Baseline Comparative Table</div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="table-casestudy">
+              <thead>
+                <tr>
+                  <th>Corridor</th>
+                  <th>Distance (nm)</th>
+                  <th>Demand (TEU)</th>
+                  <th>Naive Speed</th>
+                  <th>Opt Speed</th>
+                  <th>Naive Fleet</th>
+                  <th>Opt Fleet</th>
+                  <th>Naive Oversupply</th>
+                  <th>Opt Oversupply</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 8. ABOUT & METHOD VIEW ================= -->
+      <section id="page-about" class="view-panel" style="display: none;">
+        <div class="card">
+          <div class="card-title" style="margin-bottom: 0.5rem;">Multi-Objective Fleet Optimization Formulation</div>
+          <p style="font-size: 0.85rem; color: var(--slate-700); margin-bottom: 1rem;">
+            The platform formulates maritime logistics as a discrete combinatorial optimization problem over route allocation bitstrings, minimizing composite penalized operational fitness:
+          </p>
+          <div style="background: var(--slate-100); padding: 1rem; border-radius: var(--radius); font-family: monospace; font-size: 0.9rem; margin-bottom: 1rem;">
+            F(x) = w_f * (f_fuel(x) / N_fuel) + w_c * (f_cost(x) / N_cost) + w_e * (f_emiss(x) / N_emiss) + Penalty(x)
+          </div>
+          <p style="font-size: 0.85rem; color: var(--slate-600);">
+            Naval architecture hydrodynamics utilize the cubic law of propulsion power combined with Admiralty displacement coefficient scaling (2/3 power of total vessel plus cargo displacement).
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom: 0.5rem;">Platform Disclosures & Architecture</div>
+          <ul style="font-size: 0.85rem; color: var(--slate-700); padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            <li><b>Synthetic Data:</b> Illustrative prototype parameters modeled from AIS traffic and IMO GHG Study benchmarks. Not for live voyage navigation.</li>
+            <li><b>Quantum-Inspired Algorithm:</b> Classical CPU heuristic utilizing Q-bit rotation gates and H-gate catastrophic disruption recovery. Runs entirely on classical hardware.</li>
+            <li><b>Serverless Architecture:</b> Powered by FastAPI and Vercel Serverless Functions with instant JSON serialization.</li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
