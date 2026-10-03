@@ -21,6 +21,16 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.models.physics import load_config, calculate_leg_fuel_conventional
+from src.models.network import (
+    load_ports_catalog,
+    get_demo_network,
+    calculate_haversine_distance_nm,
+    build_problem_from_network,
+    Network,
+    PortDefinition,
+    RouteDefinition,
+    explain_infeasibility,
+)
 from src.analysis.fuels import compare_fuels_for_voyage
 from src.analysis.shore_power import analyze_shore_power_fleet
 from src.analysis.scenarios import run_all_preset_scenarios, evaluate_scenario, PRESET_SCENARIOS
@@ -124,6 +134,58 @@ def build_routes_df(prob: FleetOptimizationProblem, opt_eval: Dict[str, Any]) ->
 def get_system_config():
     """Returns the central vessel, route, port, and environmental configuration."""
     return clean_json(load_config())
+ 
+@app.get("/api/ports-catalog")
+def get_ports_catalog():
+    """Returns the catalog of 20+ real-world global maritime ports and demo network defaults."""
+    catalog = load_ports_catalog()
+    demo_net = get_demo_network()
+    return clean_json({
+        "catalog": catalog,
+        "demo_network": demo_net.model_dump(),
+    })
+
+@app.get("/api/calculate-distance")
+def calculate_distance(
+    lat1: float = Query(...),
+    lon1: float = Query(...),
+    lat2: float = Query(...),
+    lon2: float = Query(...),
+    detour_factor: float = Query(1.15),
+):
+    """Calculates nautical distance with maritime detour factor."""
+    dist = calculate_haversine_distance_nm(lat1, lon1, lat2, lon2, detour_factor)
+    return clean_json({"distance_nm": round(dist, 1)})
+
+@app.post("/api/optimize-network")
+def optimize_custom_network(network_data: Dict[str, Any] = Body(...)):
+    """Optimizes fleet deployment for a custom user-defined network."""
+    try:
+        net = Network.model_validate(network_data)
+        prob = build_problem_from_network(net)
+        opt_res = optimize_fleet_plan(
+            problem=prob,
+            num_qiea_starts=4,
+            evals_per_start=3000,
+            seeds=[42, 43, 44, 45],
+        )
+        opt_eval = opt_res["selected_plan"]
+        routes = build_routes_df(prob, opt_eval)
+        infeasibility_msg = None
+        if not opt_eval.get("is_feasible", True):
+            infeasibility_msg = explain_infeasibility(prob, opt_eval)
+
+        return clean_json({
+            "optimized_eval": opt_eval,
+            "naive_eval": opt_res["naive_eval"],
+            "best_conv_eval": opt_res["best_conv_eval"],
+            "df_routes": routes,
+            "winner_status": opt_res["winner_status"],
+            "infeasibility_suggestion": infeasibility_msg,
+            "is_precomputed": False,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/plan")
 def get_plan(
