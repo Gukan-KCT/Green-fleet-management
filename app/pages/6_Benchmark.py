@@ -44,7 +44,9 @@ from src.optimization.problem import FleetOptimizationProblem
 render_top_strip(
     title="Algorithmic Optimization Benchmark & Robustness",
     subtitle="Comparative convergence, solution quality, and scalability across 10 random seeds (20,000 evals/run).",
+    demo_only=True,
 )
+
 inject_css()
 
 cfg = get_default_config()

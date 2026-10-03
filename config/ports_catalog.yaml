@@ -1,0 +1,347 @@
+# ==============================================================================
+# Port Catalog - Global and Regional Maritime Terminals
+# ==============================================================================
+# DISCLAIMER: All coordinates are approximate centroids for illustrative modeling.
+# Verify navigation coordinates with Admiralty/NGA sailing directions before operational use.
+# Non-demo catalog ports default to: has_shore_power=false, supported_fuels=['HFO', 'MGO']
+# ==============================================================================
+
+# --- Demo Ports (South Asia Regional Feeder Baseline) ---
+mumbai:
+  name: "Port of Nhava Sheva (Mumbai)"
+  country: "India"
+  lat: 18.95
+  lon: 72.95
+  coordinates_note: "approximate, verify"
+  has_shore_power: true
+  grid_ef_tonnes_per_mwh: 0.71
+  electricity_price_usd_per_mwh: 120.0
+  port_call_fee_usd: 8500.0
+  berth_hours_avg: 24.0
+  supported_fuels: ["HFO", "MGO", "LNG", "Methanol"]
+
+kochi:
+  name: "Port of Kochi"
+  country: "India"
+  lat: 9.97
+  lon: 76.28
+  coordinates_note: "approximate, verify"
+  has_shore_power: true
+  grid_ef_tonnes_per_mwh: 0.65
+  electricity_price_usd_per_mwh: 115.0
+  port_call_fee_usd: 6200.0
+  berth_hours_avg: 20.0
+  supported_fuels: ["HFO", "MGO", "LNG"]
+
+tuticorin:
+  name: "V.O. Chidambaranar Port (Tuticorin)"
+  country: "India"
+  lat: 8.76
+  lon: 78.13
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.70
+  electricity_price_usd_per_mwh: 125.0
+  port_call_fee_usd: 5400.0
+  berth_hours_avg: 18.0
+  supported_fuels: ["HFO", "MGO"]
+
+chennai:
+  name: "Chennai Port"
+  country: "India"
+  lat: 13.08
+  lon: 80.29
+  coordinates_note: "approximate, verify"
+  has_shore_power: true
+  grid_ef_tonnes_per_mwh: 0.68
+  electricity_price_usd_per_mwh: 118.0
+  port_call_fee_usd: 7800.0
+  berth_hours_avg: 22.0
+  supported_fuels: ["HFO", "MGO", "LNG", "Methanol"]
+
+colombo:
+  name: "Port of Colombo"
+  country: "Sri Lanka"
+  lat: 6.95
+  lon: 79.85
+  coordinates_note: "approximate, verify"
+  has_shore_power: true
+  grid_ef_tonnes_per_mwh: 0.58
+  electricity_price_usd_per_mwh: 140.0
+  port_call_fee_usd: 9200.0
+  berth_hours_avg: 26.0
+  supported_fuels: ["HFO", "MGO", "LNG", "Methanol", "Ammonia"]
+
+singapore:
+  name: "Port of Singapore"
+  country: "Singapore"
+  lat: 1.29
+  lon: 103.85
+  coordinates_note: "approximate, verify"
+  has_shore_power: true
+  grid_ef_tonnes_per_mwh: 0.41
+  electricity_price_usd_per_mwh: 155.0
+  port_call_fee_usd: 11500.0
+  berth_hours_avg: 20.0
+  supported_fuels: ["HFO", "MGO", "LNG", "Methanol", "Ammonia", "Hydrogen"]
+
+# --- Major Global & Regional Hubs (Catalog additions) ---
+rotterdam:
+  name: "Port of Rotterdam"
+  country: "Netherlands"
+  lat: 51.92
+  lon: 4.48
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.38
+  electricity_price_usd_per_mwh: 160.0
+  port_call_fee_usd: 12000.0
+  berth_hours_avg: 24.0
+  supported_fuels: ["HFO", "MGO"]
+
+shanghai:
+  name: "Port of Shanghai"
+  country: "China"
+  lat: 31.23
+  lon: 121.47
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.62
+  electricity_price_usd_per_mwh: 110.0
+  port_call_fee_usd: 11000.0
+  berth_hours_avg: 24.0
+  supported_fuels: ["HFO", "MGO"]
+
+dubai_jebel_ali:
+  name: "Port of Jebel Ali (Dubai)"
+  country: "United Arab Emirates"
+  lat: 25.01
+  lon: 55.06
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.52
+  electricity_price_usd_per_mwh: 130.0
+  port_call_fee_usd: 9500.0
+  berth_hours_avg: 22.0
+  supported_fuels: ["HFO", "MGO"]
+
+busan:
+  name: "Port of Busan"
+  country: "South Korea"
+  lat: 35.10
+  lon: 129.04
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.48
+  electricity_price_usd_per_mwh: 125.0
+  port_call_fee_usd: 9000.0
+  berth_hours_avg: 20.0
+  supported_fuels: ["HFO", "MGO"]
+
+hong_kong:
+  name: "Port of Hong Kong"
+  country: "Hong Kong"
+  lat: 22.31
+  lon: 114.17
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.60
+  electricity_price_usd_per_mwh: 135.0
+  port_call_fee_usd: 10500.0
+  berth_hours_avg: 22.0
+  supported_fuels: ["HFO", "MGO"]
+
+los_angeles:
+  name: "Port of Los Angeles"
+  country: "United States"
+  lat: 33.74
+  lon: -118.27
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.28
+  electricity_price_usd_per_mwh: 175.0
+  port_call_fee_usd: 14000.0
+  berth_hours_avg: 28.0
+  supported_fuels: ["HFO", "MGO"]
+
+antwerp:
+  name: "Port of Antwerp-Bruges"
+  country: "Belgium"
+  lat: 51.26
+  lon: 4.34
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.22
+  electricity_price_usd_per_mwh: 165.0
+  port_call_fee_usd: 11200.0
+  berth_hours_avg: 24.0
+  supported_fuels: ["HFO", "MGO"]
+
+hamburg:
+  name: "Port of Hamburg"
+  country: "Germany"
+  lat: 53.55
+  lon: 9.99
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.35
+  electricity_price_usd_per_mwh: 180.0
+  port_call_fee_usd: 11800.0
+  berth_hours_avg: 24.0
+  supported_fuels: ["HFO", "MGO"]
+
+tanjung_pelepas:
+  name: "Port of Tanjung Pelepas"
+  country: "Malaysia"
+  lat: 1.36
+  lon: 103.55
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.59
+  electricity_price_usd_per_mwh: 115.0
+  port_call_fee_usd: 7500.0
+  berth_hours_avg: 20.0
+  supported_fuels: ["HFO", "MGO"]
+
+port_klang:
+  name: "Port Klang"
+  country: "Malaysia"
+  lat: 3.00
+  lon: 101.40
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.59
+  electricity_price_usd_per_mwh: 115.0
+  port_call_fee_usd: 7200.0
+  berth_hours_avg: 20.0
+  supported_fuels: ["HFO", "MGO"]
+
+chittagong:
+  name: "Port of Chittagong"
+  country: "Bangladesh"
+  lat: 22.32
+  lon: 91.81
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.63
+  electricity_price_usd_per_mwh: 120.0
+  port_call_fee_usd: 6000.0
+  berth_hours_avg: 36.0
+  supported_fuels: ["HFO", "MGO"]
+
+karachi:
+  name: "Port of Karachi"
+  country: "Pakistan"
+  lat: 24.84
+  lon: 66.97
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.55
+  electricity_price_usd_per_mwh: 110.0
+  port_call_fee_usd: 6500.0
+  berth_hours_avg: 24.0
+  supported_fuels: ["HFO", "MGO"]
+
+salalah:
+  name: "Port of Salalah"
+  country: "Oman"
+  lat: 16.94
+  lon: 54.00
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.50
+  electricity_price_usd_per_mwh: 125.0
+  port_call_fee_usd: 8000.0
+  berth_hours_avg: 20.0
+  supported_fuels: ["HFO", "MGO"]
+
+valencia:
+  name: "Port of Valencia"
+  country: "Spain"
+  lat: 39.45
+  lon: -0.32
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.25
+  electricity_price_usd_per_mwh: 150.0
+  port_call_fee_usd: 9800.0
+  berth_hours_avg: 22.0
+  supported_fuels: ["HFO", "MGO"]
+
+piraeus:
+  name: "Port of Piraeus"
+  country: "Greece"
+  lat: 37.94
+  lon: 23.63
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.42
+  electricity_price_usd_per_mwh: 155.0
+  port_call_fee_usd: 9200.0
+  berth_hours_avg: 22.0
+  supported_fuels: ["HFO", "MGO"]
+
+tokyo:
+  name: "Port of Tokyo"
+  country: "Japan"
+  lat: 35.62
+  lon: 139.77
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.46
+  electricity_price_usd_per_mwh: 170.0
+  port_call_fee_usd: 12500.0
+  berth_hours_avg: 20.0
+  supported_fuels: ["HFO", "MGO"]
+
+santos:
+  name: "Port of Santos"
+  country: "Brazil"
+  lat: -23.96
+  lon: -46.30
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.12
+  electricity_price_usd_per_mwh: 140.0
+  port_call_fee_usd: 8800.0
+  berth_hours_avg: 28.0
+  supported_fuels: ["HFO", "MGO"]
+
+sydney:
+  name: "Port Botany (Sydney)"
+  country: "Australia"
+  lat: -33.97
+  lon: 151.22
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.68
+  electricity_price_usd_per_mwh: 160.0
+  port_call_fee_usd: 11000.0
+  berth_hours_avg: 22.0
+  supported_fuels: ["HFO", "MGO"]
+
+alexandria:
+  name: "Port of Alexandria"
+  country: "Egypt"
+  lat: 31.18
+  lon: 29.87
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.54
+  electricity_price_usd_per_mwh: 105.0
+  port_call_fee_usd: 7000.0
+  berth_hours_avg: 26.0
+  supported_fuels: ["HFO", "MGO"]
+
+durban:
+  name: "Port of Durban"
+  country: "South Africa"
+  lat: -29.87
+  lon: 31.02
+  coordinates_note: "approximate, verify"
+  has_shore_power: false
+  grid_ef_tonnes_per_mwh: 0.88
+  electricity_price_usd_per_mwh: 130.0
+  port_call_fee_usd: 8200.0
+  berth_hours_avg: 30.0
+  supported_fuels: ["HFO", "MGO"]

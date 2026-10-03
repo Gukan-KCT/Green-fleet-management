@@ -88,19 +88,29 @@ def get_or_load_plan(
     pop_size: int = 40,
     generations: int = 150,
     random_seed: int = 42,
+    num_starts: int = 5,
+    evals_per_start: int = 4000,
 ) -> Dict[str, Any]:
     """
     Retrieves the active optimized fleet plan from session state or computes it using
-    the unified optimize_fleet_plan engine (multi-start unseeded QIEA).
+    the unified optimize_fleet_plan engine (multi-start unseeded QIEA), supporting both
+    the demo network and user-defined custom networks.
     """
-    state_key = "current_plan_result"
+    from src.models.network import get_demo_network, build_problem_from_network, explain_infeasibility
+
+    active_net = st.session_state.get("active_network", get_demo_network())
+    net_hash = active_net.compute_hash() if hasattr(active_net, "compute_hash") else "demo"
+    is_demo = getattr(active_net, "is_demo", True)
+
+    state_key = f"current_plan_result_{net_hash}"
 
     if not force_recompute and state_key in st.session_state:
         return st.session_state[state_key]
 
-    # Check if precomputed case study is available for default settings
+    # Check if precomputed case study is available for default settings (DEMO NETWORK ONLY)
     is_default = (
-        weights == (0.2, 0.4, 0.4)
+        is_demo
+        and weights == (0.2, 0.4, 0.4)
         and allowed_fuels is None
         and shore_power is True
         and speed_cap >= 18.0
@@ -124,24 +134,45 @@ def get_or_load_plan(
                 "convergence": saved_case.get("convergence", saved_case.get("convergence_curve", [])),
                 "best_bits": saved_case.get("balanced_bits", saved_case.get("best_bits", saved_case.get("optimized_bits", []))),
                 "winner_status": saved_case.get("summary", {}).get("winner_status_balanced", "Green plan selected"),
+                "infeasibility_suggestions": [],
+                "is_custom_network": False,
+                "network_hash": net_hash,
             }
             st.session_state[state_key] = plan_res
             return plan_res
 
-    # Real-time optimization using the unified planner
+    # Build problem for active network
+    cand_opts = DEFAULT_CANDIDATE_OPTIONS
+    if allowed_fuels is not None:
+        cand_opts = [o for o in DEFAULT_CANDIDATE_OPTIONS if o["fuel"] in allowed_fuels]
+        if not cand_opts:
+            cand_opts = DEFAULT_CANDIDATE_OPTIONS
+
+    prob = build_problem_from_network(
+        network=active_net,
+        weights=weights,
+        candidate_options=cand_opts,
+        speed_cap=speed_cap,
+        shore_power_forced=True if shore_power else False,
+    )
+
     plan_out = optimize_fleet_plan(
+        problem=prob,
         weights=weights,
         allowed_fuels=allowed_fuels,
         speed_cap=speed_cap,
         shore_power=shore_power,
-        num_qiea_starts=5,
-        evals_per_start=4000,
-        seeds=[random_seed, random_seed + 1, random_seed + 2, random_seed + 3, random_seed + 4],
+        num_qiea_starts=num_starts,
+        evals_per_start=evals_per_start,
+        seeds=[random_seed + i for i in range(num_starts)],
     )
 
-    prob = plan_out["problem"]
     selected_eval = plan_out["selected_plan"]
     df_routes = build_routes_dataframe(prob, selected_eval)
+
+    suggestions = []
+    if not selected_eval.get("is_feasible", True):
+        suggestions = explain_infeasibility(prob, selected_eval)
 
     plan_res = {
         "problem": prob,
@@ -153,10 +184,14 @@ def get_or_load_plan(
         "convergence": plan_out["convergence_curve"],
         "best_bits": plan_out["selected_bits"],
         "winner_status": plan_out["winner_status"],
+        "infeasibility_suggestions": suggestions,
+        "is_custom_network": not is_demo,
+        "network_hash": net_hash,
     }
 
     st.session_state[state_key] = plan_res
     return plan_res
+
 
 
 def get_or_load_prediction_results() -> Optional[Dict[str, Any]]:

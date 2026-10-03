@@ -114,10 +114,14 @@ def get_best_conventional_baseline(
     # 1. Start with feasible naive baseline as primary candidate
     naive_bits, naive_eval = get_naive_baseline(problem)
     candidates = []
-    if naive_eval["is_feasible"]:
+    if naive_eval is not None and naive_eval["is_feasible"]:
         candidates.append((naive_bits.copy(), naive_eval))
 
     hfo_options = [opt for opt in problem.options if opt["fuel"] == "HFO"]
+    if not hfo_options:
+        # If no HFO options exist in problem candidate pool, use the first available options
+        hfo_options = problem.options[:min(3, len(problem.options))]
+
     conv_problem = FleetOptimizationProblem(
         config=problem.config,
         candidate_options=hfo_options,
@@ -136,8 +140,9 @@ def get_best_conventional_baseline(
         allocs, speeds, _ = conv_problem.decode_solution(conv_bits)
         full_allocs = np.zeros((len(problem.options), len(problem.route_keys)), dtype=int)
         for c_idx, opt in enumerate(hfo_options):
-            o_idx = problem.options.index(opt)
-            full_allocs[o_idx, :] = allocs[c_idx, :]
+            if opt in problem.options:
+                o_idx = problem.options.index(opt)
+                full_allocs[o_idx, :] = allocs[c_idx, :]
         shore = {p: False for p in problem.port_keys}
         return problem.encode_solution(full_allocs, speeds, shore)
 
@@ -171,10 +176,19 @@ def get_best_conventional_baseline(
         if ev_q["is_feasible"]:
             candidates.append((full_q_bits, ev_q))
 
+    # If no feasible candidate found, take the best unconstrained candidate from QIEA / Naive
+    if not candidates:
+        if naive_eval is not None:
+            candidates.append((naive_bits, naive_eval))
+        else:
+            cand_bits = np.zeros(problem.n_bits, dtype=int)
+            candidates.append((cand_bits, problem.evaluate(cand_bits)))
+
     # 3. Polish best candidate with 1-bit-flip local search restricted to HFO and speeds
     best_cand_bits, best_cand_eval = min(
         candidates, key=lambda c: c[1]["fitness"] if c[1]["is_feasible"] else float("inf")
     )
+
 
     curr_bits = best_cand_bits.copy()
     curr_fit = best_cand_eval["fitness"]

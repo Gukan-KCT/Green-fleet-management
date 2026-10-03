@@ -101,29 +101,51 @@ def build_network_map(df_routes: pd.DataFrame, ports_config: Dict[str, Any]) -> 
         )
     )
 
-    fig.update_geos(
-        projection_type="equirectangular",
-        showcoastlines=True,
-        coastlinecolor="#cbd5e1",
-        showland=True,
-        landcolor="#f1f5f9",
-        showocean=True,
-        oceancolor="#ffffff",
-        showlakes=False,
-        showrivers=False,
-        showcountries=True,
-        countrycolor="#e2e8f0",
-        center=dict(lat=12.0, lon=82.0),
-        lataxis_range=[0.0, 24.0],
-        lonaxis_range=[68.0, 106.0],
-    )
+    # Dynamically center and fit to ports if present
+    if port_lats and port_lons:
+        min_lat, max_lat = min(port_lats), max(port_lats)
+        min_lon, max_lon = min(port_lons), max(port_lons)
+        center_lat = (min_lat + max_lat) / 2.0
+        center_lon = (min_lon + max_lon) / 2.0
+        lat_span = max(10.0, (max_lat - min_lat) * 1.3)
+        lon_span = max(15.0, (max_lon - min_lon) * 1.3)
+
+        fig.update_geos(
+            projection_type="equirectangular",
+            showcoastlines=True,
+            coastlinecolor="#cbd5e1",
+            showland=True,
+            landcolor="#f1f5f9",
+            showocean=True,
+            oceancolor="#ffffff",
+            showlakes=False,
+            showrivers=False,
+            showcountries=True,
+            countrycolor="#e2e8f0",
+            center=dict(lat=center_lat, lon=center_lon),
+            lataxis_range=[center_lat - lat_span / 2.0, center_lat + lat_span / 2.0],
+            lonaxis_range=[center_lon - lon_span / 2.0, center_lon + lon_span / 2.0],
+        )
+    else:
+        fig.update_geos(
+            projection_type="equirectangular",
+            showcoastlines=True,
+            coastlinecolor="#cbd5e1",
+            showland=True,
+            landcolor="#f1f5f9",
+            showocean=True,
+            oceancolor="#ffffff",
+            showcountries=True,
+            countrycolor="#e2e8f0",
+        )
 
     apply_theme_layout(
         fig,
-        title="Regional Feeder Corridor Network & Terminal Infrastructure",
-        height=380,
+        title="Maritime Corridor Network & Terminal Infrastructure",
+        height=400,
         margin=dict(l=10, r=10, t=40, b=10),
     )
+
     return fig
 
 

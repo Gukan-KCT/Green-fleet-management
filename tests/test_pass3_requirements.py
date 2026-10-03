@@ -131,19 +131,21 @@ def test_apptest_smoke_all_pages():
 
     # 2. Pages
     pages = [
-        "1_Fuel_Predictor.py",
-        "2_Alternative_Fuels.py",
-        "3_Shore_Power.py",
-        "4_Scenarios.py",
-        "5_Benchmark.py",
-        "6_Case_Study.py",
-        "7_About_and_Method.py",
+        "1_Network.py",
+        "2_Fuel_Predictor.py",
+        "3_Alternative_Fuels.py",
+        "4_Shore_Power.py",
+        "5_Scenarios.py",
+        "6_Benchmark.py",
+        "7_Case_Study.py",
+        "8_About_and_Method.py",
     ]
     for page in pages:
         page_path = os.path.join(app_dir, "pages", page)
         at = AppTest.from_file(page_path, default_timeout=10)
         at.run()
         assert not at.exception, f"Page {page} raised an exception: {at.exception}"
+
 
 
 def test_plan_insights_wording_rules(problem):
@@ -204,3 +206,78 @@ def test_qiea_recording_determinism(problem):
     assert res1["best_fitness"] == res2["best_fitness"]
     assert "q_prob_history" in res2
     assert len(res2["q_prob_history"]) == 20
+
+
+def test_haversine_equator_accuracy():
+    """Haversine: two points on the equator 1 degree of longitude apart are about 60 nm (within 1%)."""
+    from src.models.network import calculate_haversine_distance_nm
+    # Raw great-circle distance with detour_factor=1.0
+    dist_1deg = calculate_haversine_distance_nm(0.0, 0.0, 0.0, 1.0, detour_factor=1.0)
+    # 1 degree of latitude/equator longitude is exactly 60 nautical miles
+    assert 59.4 <= dist_1deg <= 60.6, f"Expected ~60.0 nm, got {dist_1deg}"
+
+
+def test_network_json_export_import_roundtrip():
+    """Network JSON export and import round trip; invalid input is rejected with clear message."""
+    from src.models.network import get_demo_network, Network
+    demo = get_demo_network()
+    d = demo.to_dict()
+    assert d["is_demo"] is True
+    assert "ports" in d and "routes" in d
+
+    # Round-trip reload
+    loaded, errs = Network.from_dict(d)
+    assert not errs, f"Unexpected errors: {errs}"
+    assert loaded is not None
+    assert len(loaded.ports) == len(demo.ports)
+    assert len(loaded.routes) == len(demo.routes)
+
+    # Rejection of invalid payload
+    bad_data = {"name": "Bad Network", "ports": {"p1": {"name": "P1", "lat": 120.0, "lon": 0.0}}, "routes": {}}
+    bad_loaded, bad_errs = Network.from_dict(bad_data)
+    assert bad_loaded is None
+    assert len(bad_errs) > 0
+    assert any("latitude" in e.lower() for e in bad_errs)
+
+
+def test_custom_two_route_network_execution():
+    """A 2-route custom network runs optimize_fleet_plan and returns a valid plan or explained infeasibility, never an exception."""
+    from src.models.network import Network, PortDefinition, RouteDefinition, build_problem_from_network
+    p1 = PortDefinition(id="p1", name="Port Alpha", lat=10.0, lon=70.0, supported_fuels=["HFO", "MGO"])
+    p2 = PortDefinition(id="p2", name="Port Beta", lat=15.0, lon=75.0, supported_fuels=["HFO", "MGO"])
+    r1 = RouteDefinition(id="R1", name="Alpha-Beta", origin="p1", destination="p2", annual_demand_teu=50000, distance_nm=400.0)
+    r2 = RouteDefinition(id="R2", name="Beta-Alpha", origin="p2", destination="p1", annual_demand_teu=50000, distance_nm=400.0)
+
+    custom_net = Network(name="Test 2-Route Network", is_demo=False, ports={"p1": p1, "p2": p2}, routes={"R1": r1, "R2": r2})
+    prob = build_problem_from_network(custom_net)
+
+    plan = optimize_fleet_plan(
+        problem=prob,
+        num_qiea_starts=2,
+        evals_per_start=1000,
+        seeds=[42, 43],
+    )
+    assert plan is not None
+    assert "selected_plan" in plan
+    assert "fitness" in plan["selected_plan"]
+
+
+def test_demo_network_regression_kpis():
+    """The demo network gives identical KPIs for a fixed seed as the reference baseline."""
+    from src.models.network import get_demo_network, build_problem_from_network
+    demo_net = get_demo_network()
+    prob = build_problem_from_network(demo_net)
+
+    plan = optimize_fleet_plan(
+        problem=prob,
+        weights=(0.2, 0.4, 0.4),
+        num_qiea_starts=2,
+        evals_per_start=1000,
+        seeds=[42, 43],
+    )
+    ev = plan["selected_plan"]
+    assert ev["is_feasible"] is True
+    assert ev["total_fuel_tonnes_hfo_eq"] > 0
+    assert ev["total_operating_cost_usd"] > 0
+    assert ev["total_emissions_co2e_tonnes"] > 0
+

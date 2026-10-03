@@ -18,6 +18,13 @@ general:
   carbon_price_usd_per_tonne: 80.0      # Illustrative global/regional carbon tax ($/t CO2e)
   weather_penalty_k_w: 0.35             # Sensitivity factor k_w in weather multiplier (1 + k_w * weather_severity)
   hours_per_day: 24.0
+  detour_factor: 1.15                   # Illustrative shipping lane detour factor over great-circle distance
+  max_interactive_routes: 8             # Maximum routes allowed in interactive builder mode
+  sea_conditions_map:
+    calm: 0.15                          # Illustrative weather_severity factor
+    moderate: 0.30                      # Illustrative weather_severity factor
+    rough: 0.45                         # Illustrative weather_severity factor
+
 
 vessel_types:
   small_feeder:

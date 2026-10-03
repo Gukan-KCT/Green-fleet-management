@@ -20,23 +20,43 @@ def render_top_strip(
     subtitle: str = "Multi-objective maritime deployment & decarbonization workspace",
     show_presets: bool = True,
     on_preset_selected: Optional[callable] = None,
+    demo_only: bool = False,
 ):
     """
     Renders a unified top header strip with title, slim synthetic disclosure chip,
-    and optional quick preset buttons.
+    active network status chip, and optional demo-only notice.
     """
+    from src.models.network import get_demo_network
+    active_net = st.session_state.get("active_network", get_demo_network())
+    net_name = active_net.name if hasattr(active_net, "name") else "Demo Network"
+    num_routes = len(active_net.routes) if hasattr(active_net, "routes") else 5
+    is_demo = getattr(active_net, "is_demo", True)
+    net_chip = f"Network: Demo ({num_routes} routes)" if is_demo else f"Network: Custom ({num_routes} routes)"
+
     col_t, col_disc = st.columns([3, 2])
     with col_t:
         st.markdown(f"### {title}")
         if subtitle:
             st.caption(subtitle)
     with col_disc:
+        demo_tag = """<span style="
+            background:rgba(220,38,38,.12); border:1px solid rgba(220,38,38,.35);
+            color:#991b1b; font-size:10.5px; font-weight:600; padding:2px 8px;
+            border-radius:20px; letter-spacing:.04em; text-transform:uppercase;
+        ">&#9888; Demo Network Only</span>""" if demo_only else ""
+
         st.markdown(
-            """
+            f"""
             <div style="
                 display:flex; gap:6px; align-items:center; flex-wrap:wrap;
                 margin-top:8px; justify-content:flex-end;
             ">
+              {demo_tag}
+              <span style="
+                background:rgba(13,148,136,.12); border:1px solid rgba(13,148,136,.35);
+                color:#0f766e; font-size:10.5px; font-weight:600; padding:2px 8px;
+                border-radius:20px; letter-spacing:.04em;
+              ">&#9875; {net_chip}</span>
               <span style="
                 background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.35);
                 color:#92400e; font-size:10.5px; font-weight:600; padding:2px 8px;
@@ -51,6 +71,7 @@ def render_top_strip(
             """,
             unsafe_allow_html=True,
         )
+
 
 
 def compute_signed_delta(opt_val: float, base_val: float) -> str:

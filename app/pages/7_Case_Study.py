@@ -38,7 +38,9 @@ from src.analysis.report import generate_html_report, generate_csv_summary
 render_top_strip(
     title="Regional Feeder Decarbonization Case Study",
     subtitle="Benchmarking multi-objective optimization against Feasible Naive and Best Conventional references.",
+    demo_only=True,
 )
+
 
 inject_css()
 cfg = get_default_config()
