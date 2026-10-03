@@ -1,81 +1,68 @@
 """
-Session state management and cached data loaders for the Green Fleet Platform.
-Ensures zero heavy computation on page loads and persists optimized state across navigation.
+Session State Management and Cached Artifact Loaders for Streamlit UI.
+Centralizes plan execution, configuration caching, and deterministic SHA-256 freshness verification.
 """
 
 from __future__ import annotations
-from typing import Dict, Any, Optional
-from pathlib import Path
 import pickle
+from pathlib import Path
+from typing import Dict, Any, Optional
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 from src.models.physics import load_config
-from src.optimization.problem import FleetOptimizationProblem
+from src.optimization.problem import FleetOptimizationProblem, DEFAULT_CANDIDATE_OPTIONS
 from src.optimization.planner import optimize_fleet_plan
-from src.optimization.qiea import QIEA
-from src.analysis.case_study import (
-    get_naive_baseline,
-    get_best_conventional_baseline,
-    run_case_study,
-)
-from src.utils.hashing import verify_pkl_freshness, compute_code_hash
+from src.utils.hashing import check_artifact_staleness, get_codebase_hash
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
-@st.cache_data(show_spinner=False)
+def get_default_config() -> Dict[str, Any]:
+    """Retrieves cached YAML configuration or loads fresh from disk."""
+    if "app_config" not in st.session_state:
+        st.session_state["app_config"] = load_config()
+    return st.session_state["app_config"]
+
+
 def load_saved_pickle(filename: str) -> Optional[Any]:
-    """Loads a precomputed pickle artifact from the data directory and checks freshness."""
-    path = DATA_DIR / filename
-    if path.exists():
+    """Safely loads a pickle file from the data directory if present."""
+    p = DATA_DIR / filename
+    if p.exists():
         try:
-            with open(path, "rb") as f:
-                data = pickle.load(f)
-                return data
+            with open(p, "rb") as f:
+                return pickle.load(f)
         except Exception:
             return None
     return None
 
 
-def check_artifact_staleness(filename: str) -> bool:
-    """Returns True if the saved pickle artifact is stale or missing."""
-    data = load_saved_pickle(filename)
-    if data is None:
-        return True
-    return not verify_pkl_freshness(data)
-
-
-def get_default_config() -> Dict[str, Any]:
-    """Loads central system YAML configuration."""
-    if "config" not in st.session_state:
-        st.session_state["config"] = load_config()
-    return st.session_state["config"]
-
-
-def build_routes_dataframe(prob: FleetOptimizationProblem, opt_eval: Dict[str, Any]) -> pd.DataFrame:
-    """Constructs standardized route assignment and oversupply dataframe from problem and eval dict."""
+def build_routes_dataframe(problem: FleetOptimizationProblem, eval_res: Dict[str, Any]) -> pd.DataFrame:
+    """
+    Transforms problem route specifications and evaluation results into an
+    interactive table for visualization and UI tables.
+    """
+    routes = problem.routes
+    route_details = eval_res.get("route_details", {})
     rows = []
-    allocs = opt_eval.get("allocations")
-    for r_idx, r_key in enumerate(prob.route_keys):
-        r_cfg = prob.routes[r_key]
-        r_det = opt_eval.get("route_details", {}).get(r_key, {})
 
-        opt_names = []
+    for r_k, r_cfg in routes.items():
+        r_det = route_details.get(r_k, {})
+        vessels_assigned = r_det.get("vessels_assigned", {})
+        total_vessels = sum(vessels_assigned.values()) if isinstance(vessels_assigned, dict) else int(vessels_assigned)
+
+        # Determine dominant fuel and option
+        opt_idx = r_det.get("selected_option_idx", 0)
         dominant_fuel = "HFO"
-        total_vessels = 0
-        if allocs is not None:
-            for o_idx, opt in enumerate(prob.options):
-                n_v = int(allocs[o_idx, r_idx])
-                if n_v > 0:
-                    opt_names.append(f"{n_v}x {opt['vessel']} ({opt['fuel']})")
-                    dominant_fuel = opt["fuel"]
-                    total_vessels += n_v
+        opt_summary = "None"
+        if 0 <= opt_idx < len(problem.options):
+            dominant_fuel = problem.options[opt_idx]["fuel"]
+            opt_summary = f"{problem.options[opt_idx]['vessel']} ({dominant_fuel})"
 
-        opt_summary = ", ".join(opt_names) if opt_names else f"1x Handymax ({dominant_fuel})"
         rows.append({
-            "Route ID": r_key,
-            "Name": r_cfg["name"],
+            "Route ID": r_k,
+            "Route Name": r_cfg["name"],
             "Origin": r_cfg["origin"],
             "Destination": r_cfg["destination"],
             "Vessels": max(1, total_vessels),
@@ -85,7 +72,7 @@ def build_routes_dataframe(prob: FleetOptimizationProblem, opt_eval: Dict[str, A
             "Capacity (TEU/yr)": int(round(r_det.get("route_cargo_cap", 0))),
             "Demand (TEU/yr)": int(round(r_det.get("annual_demand_teu", 1))),
             "Oversupply Ratio": round(r_det.get("oversupply_ratio", 1.0), 2),
-            "Reliability (%)": round(r_det.get("reliability", 95.0), 1),
+            "Reliability (%)": round(r_det.get("reliability", 95.0) if r_det.get("reliability", 1.0) > 1.0 else r_det.get("reliability", 0.95) * 100.0, 1),
             "Sailings/Wk": round(r_det.get("sailings_per_week", 1.0), 2),
             "Distance (nm)": r_cfg["distance_nm"],
         })
@@ -141,50 +128,39 @@ def get_or_load_plan(
             st.session_state[state_key] = plan_res
             return plan_res
 
-    # Otherwise compute with current custom settings via unified optimizer
-    cfg = get_default_config()
-    cand_opts = DEFAULT_CANDIDATE_OPTIONS
-    if allowed_fuels is not None:
-        cand_opts = [o for o in DEFAULT_CANDIDATE_OPTIONS if o["fuel"] in allowed_fuels]
-        if not cand_opts:
-            cand_opts = DEFAULT_CANDIDATE_OPTIONS
-
-    prob = FleetOptimizationProblem(
-        config=cfg,
-        candidate_options=cand_opts,
-        weights={"fuel": weights[0], "cost": weights[1], "emissions": weights[2]},
-        speed_cap_delta=speed_cap - 18.0,
-        shore_power_forced=True if shore_power else False,
-    )
-
-    opt_dict = optimize_fleet_plan(
-        problem=prob,
+    # Real-time optimization using the unified planner
+    plan_out = optimize_fleet_plan(
+        weights=weights,
+        allowed_fuels=allowed_fuels,
+        speed_cap=speed_cap,
+        shore_power=shore_power,
         num_qiea_starts=5,
         evals_per_start=4000,
         seeds=[random_seed, random_seed + 1, random_seed + 2, random_seed + 3, random_seed + 4],
     )
 
-    opt_eval = opt_dict["selected_plan"]
-    df_routes = build_routes_dataframe(prob, opt_eval)
+    prob = plan_out["problem"]
+    selected_eval = plan_out["selected_plan"]
+    df_routes = build_routes_dataframe(prob, selected_eval)
 
     plan_res = {
         "problem": prob,
-        "optimized_eval": opt_eval,
-        "selected_plan": opt_eval,
-        "naive_eval": opt_dict["naive_eval"],
-        "best_conv_eval": opt_dict["best_conv_eval"],
+        "optimized_eval": selected_eval,
+        "selected_plan": selected_eval,
+        "naive_eval": plan_out["naive_eval"],
+        "best_conv_eval": plan_out["best_conv_eval"],
         "df_routes": df_routes,
-        "convergence": opt_dict["convergence_curve"],
-        "best_bits": opt_dict["selected_bits"],
-        "winner_status": opt_dict["winner_status"],
-        "has_green_fuel": opt_dict["has_green_fuel"],
+        "convergence": plan_out["convergence_curve"],
+        "best_bits": plan_out["selected_bits"],
+        "winner_status": plan_out["winner_status"],
     }
+
     st.session_state[state_key] = plan_res
     return plan_res
 
 
 def get_or_load_prediction_results() -> Optional[Dict[str, Any]]:
-    """Loads precomputed fuel prediction benchmark or returns None."""
+    """Loads precomputed predictive models benchmark or returns None."""
     if "prediction_results" in st.session_state:
         return st.session_state["prediction_results"]
 
@@ -228,5 +204,41 @@ def get_or_load_case_study() -> Optional[Dict[str, Any]]:
     saved = load_saved_pickle("saved_case_study.pkl")
     if saved is not None:
         st.session_state["case_study_results"] = saved
+        return saved
+    return None
+
+
+def get_or_load_breakeven_grid() -> Optional[Dict[str, Any]]:
+    """Loads precomputed break-even sensitivity grid or computes if missing."""
+    if "breakeven_grid" in st.session_state:
+        return st.session_state["breakeven_grid"]
+
+    saved = load_saved_pickle("saved_breakeven_grid.pkl")
+    if saved is not None:
+        st.session_state["breakeven_grid"] = saved
+        return saved
+    return None
+
+
+def get_or_load_robustness() -> Optional[Dict[str, Any]]:
+    """Loads precomputed optimizer robustness results or returns None."""
+    if "robustness_results" in st.session_state:
+        return st.session_state["robustness_results"]
+
+    saved = load_saved_pickle("saved_robustness.pkl")
+    if saved is not None:
+        st.session_state["robustness_results"] = saved
+        return saved
+    return None
+
+
+def get_or_load_q_history() -> Optional[Dict[str, Any]]:
+    """Loads precomputed Q-bit probability history for visualizer."""
+    if "q_history" in st.session_state:
+        return st.session_state["q_history"]
+
+    saved = load_saved_pickle("saved_q_history.pkl")
+    if saved is not None:
+        st.session_state["q_history"] = saved
         return saved
     return None

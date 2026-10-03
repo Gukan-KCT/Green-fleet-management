@@ -1,6 +1,7 @@
 """
 Plotly Chart Builders for Green Fleet Management UI.
 Strictly adheres to semantic color tokens, units on axes, and informative hover templates.
+Includes Interactive Pareto Trade-off with Knee Point, Q-Bit Heatmaps, and Break-Even Grids.
 """
 
 from __future__ import annotations
@@ -100,100 +101,93 @@ def build_network_map(df_routes: pd.DataFrame, ports_config: Dict[str, Any]) -> 
         )
     )
 
-    fig.update_layout(
-        geo=dict(
-            scope="asia",
-            center=dict(lat=12.0, lon=85.0),
-            projection_scale=2.2,
-            showland=True,
-            landcolor="#f1f5f9",
-            countrycolor="#cbd5e1",
-            showocean=True,
-            oceancolor="#e2e8f0",
-            showcoastlines=True,
-            coastlinecolor="#94a3b8",
-            bgcolor="rgba(0,0,0,0)",
-        ),
-        margin=dict(l=0, r=0, t=10, b=0),
-        height=370,
-        paper_bgcolor="rgba(0,0,0,0)",
+    fig.update_geos(
+        projection_type="equirectangular",
+        showcoastlines=True,
+        coastlinecolor="#cbd5e1",
+        showland=True,
+        landcolor="#f1f5f9",
+        showocean=True,
+        oceancolor="#ffffff",
+        showlakes=False,
+        showrivers=False,
+        showcountries=True,
+        countrycolor="#e2e8f0",
+        center=dict(lat=12.0, lon=82.0),
+        lataxis_range=[0.0, 24.0],
+        lonaxis_range=[68.0, 106.0],
+    )
+
+    apply_theme_layout(
+        fig,
+        title="Regional Feeder Corridor Network & Terminal Infrastructure",
+        height=380,
+        margin=dict(l=10, r=10, t=40, b=10),
     )
     return fig
 
 
 def build_allocation_stacked_bar(df_routes: pd.DataFrame) -> go.Figure:
     """
-    Renders stacked bar of vessels deployed per corridor, colored by fuel type.
+    Renders stacked bar chart showing vessel deployment and fuel assignments per corridor.
     """
     fig = go.Figure()
-
     if df_routes.empty:
         return fig
 
-    # Group by Fuel type for clean semantic color coding and compact legend
-    fuels = df_routes["Fuel"].unique()
-    for fuel in fuels:
-        sub = df_routes[df_routes["Fuel"] == fuel]
-        color = get_fuel_color(str(fuel))
+    # Group by route and fuel
+    routes = df_routes["Route ID"].unique()
+    all_fuels = df_routes["Fuel"].unique()
 
-        hover_lines = []
-        for _, row in sub.iterrows():
-            r_name = row.get("Name", row["Route ID"])
-            hover_lines.append(
-                f"<b>{row['Route ID']}</b> ({r_name})<br>"
-                f"Fleet: <b>{row['Vessels']} vessels</b><br>"
-                f"Fuel: <b>{fuel}</b><br>"
-                f"Allocation: {row.get('Option', '')}<br>"
-                f"Speed: {row.get('Speed (knots)', 14.0)} kn<br>"
-                f"Reliability: {row.get('Reliability (%)', 95.0)}%"
-            )
+    for fuel in all_fuels:
+        v_counts = []
+        for r in routes:
+            sub = df_routes[(df_routes["Route ID"] == r) & (df_routes["Fuel"] == fuel)]
+            v_counts.append(sub["Vessels"].sum() if not sub.empty else 0)
 
         fig.add_trace(
             go.Bar(
-                x=sub["Route ID"],
-                y=sub["Vessels"],
+                x=routes,
+                y=v_counts,
                 name=str(fuel),
-                marker_color=color,
-                text=sub["Vessels"].apply(lambda v: f"{v} vsl"),
-                textposition="auto",
-                hoverinfo="text",
-                hovertext=hover_lines,
+                marker_color=get_fuel_color(str(fuel)),
+                hovertemplate="Route %{x}: <b>%{y} vessels</b> (" + str(fuel) + ")<extra></extra>",
             )
         )
 
     fig.update_layout(barmode="stack")
     apply_theme_layout(
         fig,
-        title=None,
-        xaxis_title="Shipping Corridor",
+        title="Fleet Allocation by Route Corridor",
+        xaxis_title="Corridor ID",
         yaxis_title="Vessels Assigned (Count)",
-        height=320,
-        show_legend=len(fuels) > 1,
+        height=380,
+        show_legend=True,
     )
     return fig
 
 
 def build_emissions_breakdown_chart(eval_res: Dict[str, Any]) -> go.Figure:
     """
-    Renders well-to-wake lifecycle emissions breakdown (Tank-to-Wake, Well-to-Tank, Berth).
+    Renders Well-to-Wake emissions breakdown across Tank-to-Wake, Well-to-Tank, and Slip.
     """
-    route_details = eval_res.get("route_details", {})
-    ttw_total = sum(r.get("voyage_ttw_emissions_t", 0.0) for r in route_details.values())
-    wtt_total = sum(r.get("voyage_wtt_emissions_t", 0.0) for r in route_details.values())
-    berth_total = sum(r.get("berth_emissions_t", 0.0) for r in route_details.values())
-
-    categories = ["Tank-to-Wake (Combustion)", "Well-to-Tank (Upstream)", "Port Berth (Aux/Shore)"]
-    values = [round(ttw_total, 1), round(wtt_total, 1), round(berth_total, 1)]
-    colors = ["#2b2d42", "#2a9d8f", "#457b9d"]
+    emiss = eval_res.get("emissions_breakdown", {})
+    categories = ["Tank-to-Wake (Combustion)", "Well-to-Tank (Upstream)", "Methane/N2O Slip"]
+    values = [
+        emiss.get("ttw_co2e_tonnes", 0.0),
+        emiss.get("wtt_co2e_tonnes", 0.0),
+        emiss.get("slip_co2e_tonnes", 0.0),
+    ]
+    colors = ["#e63946", "#457b9d", "#f4a261"]
 
     fig = go.Figure(
         go.Bar(
             x=categories,
             y=values,
             marker_color=colors,
-            text=[f"{v:,} t" for v in values],
+            text=[f"{v:,.1f} t" for v in values],
             textposition="auto",
-            hovertemplate="%{x}: <b>%{y:,} tonnes CO2e</b><extra></extra>",
+            hovertemplate="%{x}: <b>%{y:,.1f} t CO2e</b><extra></extra>",
         )
     )
     apply_theme_layout(
@@ -269,9 +263,15 @@ def build_convergence_chart(history: List[float]) -> go.Figure:
     return fig
 
 
-def build_pareto_chart(pareto_df: pd.DataFrame) -> go.Figure:
+def build_pareto_chart(
+    pareto_df: pd.DataFrame,
+    naive_eval: Optional[Dict[str, Any]] = None,
+    best_conv_eval: Optional[Dict[str, Any]] = None,
+    knee_point: Optional[Dict[str, Any]] = None,
+) -> go.Figure:
     """
-    Renders Cost vs Emissions trade-off curve with Pareto-optimal non-dominated frontier.
+    Renders Cost vs Emissions trade-off curve with Pareto-optimal frontier,
+    distinct naive & best conventional benchmark markers, and highlighted knee point.
     """
     fig = go.Figure()
 
@@ -281,6 +281,7 @@ def build_pareto_chart(pareto_df: pd.DataFrame) -> go.Figure:
     dominated = pareto_df[~pareto_df.get("is_pareto", False)]
     non_dom = pareto_df[pareto_df.get("is_pareto", False)]
 
+    # 1. Dominated solutions
     if not dominated.empty:
         fig.add_trace(
             go.Scatter(
@@ -293,6 +294,7 @@ def build_pareto_chart(pareto_df: pd.DataFrame) -> go.Figure:
             )
         )
 
+    # 2. Pareto Optimal Frontier
     if not non_dom.empty:
         non_dom_sorted = non_dom.sort_values(by="Operating Cost ($M)")
         fig.add_trace(
@@ -301,18 +303,127 @@ def build_pareto_chart(pareto_df: pd.DataFrame) -> go.Figure:
                 y=non_dom_sorted["Lifecycle CO2e (kt)"],
                 mode="lines+markers",
                 line=dict(color="#0f4c81", width=2.5),
-                marker=dict(color="#e63946", size=10, symbol="diamond"),
+                marker=dict(color="#2a9d8f", size=9, symbol="circle"),
                 name="Pareto Optimal Frontier",
-                hovertemplate="<b>Pareto Optimal</b><br>Cost: $%{x:.2f}M<br>CO2e: %{y:.2f} kt<extra></extra>",
+                hovertemplate="<b>Pareto Policy</b><br>Cost: $%{x:.2f}M<br>CO2e: %{y:.2f} kt<extra></extra>",
             )
         )
+
+    # 3. Naive Baseline Marker
+    if naive_eval:
+        n_c = naive_eval["total_operating_cost_usd"] / 1e6
+        n_e = naive_eval["total_emissions_co2e_tonnes"] / 1000.0
+        fig.add_trace(
+            go.Scatter(
+                x=[n_c],
+                y=[n_e],
+                mode="markers",
+                marker=dict(color="#64748b", size=13, symbol="square"),
+                name="Feasible Naive Baseline",
+                hovertemplate="<b>Feasible Naive Baseline</b><br>Cost: $%{x:.2f}M<br>CO2e: %{y:.2f} kt<extra></extra>",
+            )
+        )
+
+    # 4. Best Conventional Marker
+    if best_conv_eval:
+        bc_c = best_conv_eval["total_operating_cost_usd"] / 1e6
+        bc_e = best_conv_eval["total_emissions_co2e_tonnes"] / 1000.0
+        fig.add_trace(
+            go.Scatter(
+                x=[bc_c],
+                y=[bc_e],
+                mode="markers",
+                marker=dict(color="#f4a261", size=14, symbol="triangle-up"),
+                name="Best Conventional Baseline",
+                hovertemplate="<b>Best Conventional Baseline</b><br>Cost: $%{x:.2f}M<br>CO2e: %{y:.2f} kt<extra></extra>",
+            )
+        )
+
+    # 5. Highlight Knee Point
+    if knee_point:
+        k_c = knee_point.get("Operating Cost ($M)")
+        k_e = knee_point.get("Lifecycle CO2e (kt)")
+        if k_c is not None and k_e is not None:
+            fig.add_trace(
+                go.Scatter(
+                    x=[k_c],
+                    y=[k_e],
+                    mode="markers",
+                    marker=dict(color="#e63946", size=16, symbol="star"),
+                    name="Knee Point (Best Compromise)",
+                    hovertemplate="<b>Knee Point (Max Trade-off Efficiency)</b><br>Cost: $%{x:.2f}M<br>CO2e: %{y:.2f} kt<extra></extra>",
+                )
+            )
 
     apply_theme_layout(
         fig,
         title="Multi-Objective Trade-Off: Operating Cost vs Lifecycle Emissions",
         xaxis_title="Annual Operating Cost ($ Millions USD)",
         yaxis_title="Lifecycle Emissions (Thousand Tonnes CO2e)",
-        height=320,
+        height=360,
         show_legend=True,
+    )
+    return fig
+
+
+def build_qbit_probabilities_heatmap(q_prob_history: List[np.ndarray], max_bits: int = 40) -> go.Figure:
+    """
+    Renders generation x bit probability heatmap showing Q-bit superposition collapse sin^2(theta).
+    """
+    if not q_prob_history:
+        return go.Figure()
+
+    matrix = np.array(q_prob_history)[:, :max_bits].T  # shape: (n_bits, n_generations)
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=matrix,
+            x=list(range(1, matrix.shape[1] + 1)),
+            y=[f"Q-bit {i+1}" for i in range(matrix.shape[0])],
+            colorscale="Viridis",
+            zmin=0.0,
+            zmax=1.0,
+            colorbar=dict(title="Probability sin²(θ)"),
+            hovertemplate="Bit %{y}<br>Gen %{x}<br>P(1) = %{z:.3f}<extra></extra>",
+        )
+    )
+    apply_theme_layout(
+        fig,
+        title="Quantum-Inspired Angular Superposition Collapse (Classical Simulation)",
+        xaxis_title="Generation",
+        yaxis_title="Q-Bit Allele Index",
+        height=380,
+    )
+    return fig
+
+
+def build_breakeven_heatmap(df_grid: pd.DataFrame) -> go.Figure:
+    """
+    Renders 2D Break-even sensitivity heatmap over Fuel Price Multiplier x Carbon Price.
+    """
+    if df_grid.empty:
+        return go.Figure()
+
+    pivot = df_grid.pivot(
+        index="fuel_price_multiplier",
+        columns="carbon_price_usd",
+        values="co2e_kt",
+    )
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=pivot.values,
+            x=[f"${int(c)}/t" for c in pivot.columns],
+            y=[f"{f:.2f}x" for f in pivot.index],
+            colorscale="YlGnBu_r",
+            colorbar=dict(title="CO2e (kt)"),
+            hovertemplate="Fuel Price: %{y}<br>Carbon Tax: %{x}<br>Total Emissions: <b>%{z:.1f} kt CO2e</b><extra></extra>",
+        )
+    )
+    apply_theme_layout(
+        fig,
+        title="Carbon Tax vs Bunker Price Sensitivity Heatmap (Illustrative)",
+        xaxis_title="Carbon Price ($ USD / tCO2e)",
+        yaxis_title="Bunker Fuel Price Multiplier",
+        height=320,
     )
     return fig

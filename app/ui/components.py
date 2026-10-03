@@ -1,12 +1,18 @@
 """
 Reusable UI component helpers for Green Fleet Decision-Support Dashboard.
-Implements compact header strips, signed KPI metric cards, and constraint badges.
+Implements compact header strips, signed KPI metric cards, constraint badges,
+Plan Insights Cards, Carbon Intensity Gauges, and Demo Mode components.
 """
 
 from __future__ import annotations
 from typing import Dict, Any, Optional
 import streamlit as st
 import pandas as pd
+
+from src.analysis.decision_support import (
+    generate_plan_insights,
+    compute_carbon_intensity_rating,
+)
 
 
 def render_top_strip(
@@ -45,7 +51,6 @@ def render_top_strip(
             """,
             unsafe_allow_html=True,
         )
-
 
 
 def compute_signed_delta(opt_val: float, base_val: float) -> str:
@@ -110,7 +115,7 @@ def render_kpi_row(
                 value=f"{int(round(opt_emiss)):,}",
                 delta=f"{delta_emiss} vs {comparator_name}",
                 delta_color="inverse",
-                help=f"Baseline: {int(round(base_emiss)):,} t. Well-to-Wake greenhouse gas emissions including methane slip.",
+                help=f"Baseline: {int(round(base_emiss)):,} t. Well-to-Wake greenhouse gas emissions.",
             )
 
     # 4. Carbon Intensity
@@ -121,41 +126,102 @@ def render_kpi_row(
         with st.container(border=True):
             st.metric(
                 label="Carbon Intensity (g/t-nm)",
-                value=f"{opt_ci:.2f}",
+                value=f"{opt_ci:.1f}",
                 delta=f"{delta_ci} vs {comparator_name}",
                 delta_color="inverse",
-                help=f"Baseline: {base_ci:.2f} g/t-nm. Uses cargo actually moved = min(capacity, demand) * distance.",
+                help=f"Baseline: {base_ci:.1f} g/t-nm. Lifecycle CO2e per tonne-nautical-mile of transport work.",
             )
 
-    # 5. Feasibility
-    is_feasible = opt_eval.get("is_feasible", False)
-    violations = opt_eval.get("violations", opt_eval.get("constraint_violations", {}))
-    active_viols = [k for k, v in violations.items() if v > 0]
+    # 5. Feasibility Status
+    is_feas = opt_eval.get("is_feasible", True)
     with cols[4]:
         with st.container(border=True):
-            if is_feasible:
+            if is_feas:
                 st.metric(
-                    label="Feasibility Status",
+                    label="Operational Audit",
                     value="FEASIBLE",
-                    delta="0 Violations",
+                    delta="All constraints met",
                     delta_color="normal",
-                    help="All demand, frequency, vessel inventory, speed, and emission constraints satisfied.",
+                    help="All demand, frequency, speed, and availability rules satisfied.",
                 )
             else:
+                viols = opt_eval.get("violations", opt_eval.get("constraint_violations", {}))
+                active_viols = [k for k, v in viols.items() if v > 0]
                 st.metric(
-                    label="Feasibility Status",
+                    label="Operational Audit",
                     value="INFEASIBLE",
-                    delta=f"{len(active_viols)} Violations",
+                    delta=f"{len(active_viols)} violations",
                     delta_color="inverse",
                     help=f"Active violations: {', '.join(active_viols)}",
                 )
+
+
+def render_plan_insights_card(
+    opt_eval: Dict[str, Any],
+    best_conv_eval: Dict[str, Any],
+    problem: Any,
+    carbon_price_ref: float = 80.0,
+):
+    """
+    Renders an executive plain-language Plan Insights card generated from result data.
+    """
+    insights = generate_plan_insights(
+        opt_eval=opt_eval,
+        best_conv_eval=best_conv_eval,
+        problem=problem,
+        carbon_price_ref=carbon_price_ref,
+    )
+
+    with st.container(border=True):
+        st.markdown("**💡 Plan Insights & Executive Summary**")
+        st.write(insights["text_summary"])
+
+        col_a1, col_a2, col_a3 = st.columns(3)
+        with col_a1:
+            abat_val = insights["abatement_cost"]
+            st.caption(
+                f"**Abatement Cost:** {f'${abat_val:,.1f}/tCO2e' if abat_val is not None else 'N/A (Cost Saving)'}"
+            )
+        with col_a2:
+            st.caption(f"**Clean Propulsion Lanes:** {insights['n_clean_routes']} corridors")
+        with col_a3:
+            st.caption(f"**Critical Margin:** {insights['weakest_constraint']}")
+
+
+def render_carbon_intensity_badge(ci_g_tnm: float):
+    """
+    Renders an A-E style rating badge for the carbon-intensity proxy.
+    """
+    rating = compute_carbon_intensity_rating(ci_g_tnm)
+    st.markdown(
+        f"""
+        <div style="
+            display:flex; align-items:center; gap:12px; background:#f8fafc;
+            border:1px solid #e2e8f0; border-radius:8px; padding:8px 14px;
+        ">
+            <span style="
+                background:{rating['color']}; color:#ffffff; font-weight:800;
+                font-size:18px; width:34px; height:34px; display:inline-flex;
+                align-items:center; justify-content:center; border-radius:6px;
+            ">{rating['grade']}</span>
+            <div>
+                <div style="font-size:13px; font-weight:700; color:#1e293b;">
+                    Carbon Intensity Rating: {rating['description']}
+                </div>
+                <div style="font-size:11px; color:#64748b;">
+                    Score: <b>{rating['ci_val']} g CO2e / t-nm</b> &bull; <i>{rating['disclaimer']}</i>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_constraints_table(eval_res: Dict[str, Any], problem: Any):
     """
     Renders a clear tabular constraint audit showing PASS/FAIL, actual, limit, and margin.
     """
-    violations = eval_res.get("violations", {})
     route_details = eval_res.get("route_details", {})
 
     rows = []

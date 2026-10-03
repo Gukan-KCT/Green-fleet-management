@@ -69,10 +69,12 @@ def apply_theme_layout(
     yaxis_title: str = "",
     height: int = 380,
     show_legend: bool = True,
+    **kwargs: Any,
 ) -> go.Figure:
     """
     Standardize Plotly figures with clean layout, informative axes, and consistent typography.
     """
+    margin = kwargs.get("margin", dict(l=40, r=20, t=50 if title else (32 if show_legend else 15), b=40))
     fig.update_layout(
         title=dict(
             text=f"<b>{title}</b>",
@@ -96,7 +98,7 @@ def apply_theme_layout(
             linecolor="#cbd5e1",
             tickfont=dict(size=11, color=UI_COLORS["text"]),
         ),
-        margin=dict(l=40, r=20, t=50 if title else (32 if show_legend else 15), b=40),
+        margin=margin,
         height=height,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",

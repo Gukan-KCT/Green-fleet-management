@@ -54,10 +54,13 @@ class QIEA:
         use_memetic: bool = True,
         memetic_interval: int = 8,
         repair_func: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+        record_q_history: bool = False,
     ):
         self.n_bits = n_bits
         self.pop_size = pop_size
         self.generations = generations
+        self.record_q_history = record_q_history
+        self.q_prob_history_: List[np.ndarray] = []
         self.total_budget = pop_size * generations
         self.rotation_angle = rotation_angle
         self.mutation_rate = mutation_rate
@@ -237,6 +240,12 @@ class QIEA:
                         global_best_bits = cur_bits.copy()
                         global_best_fitness = cur_fit
 
+            if self.record_q_history:
+                # Average probability sin^2(theta) across all islands and individuals
+                all_angles = np.vstack(q_pops)
+                mean_probs = np.mean(np.sin(all_angles) ** 2, axis=0)
+                self.q_prob_history_.append(mean_probs.copy())
+
             self.convergence_curve_.append(global_best_fitness)
 
             if progress_callback:
@@ -248,13 +257,18 @@ class QIEA:
 
         while len(self.convergence_curve_) < self.generations:
             self.convergence_curve_.append(global_best_fitness)
+            if self.record_q_history and self.q_prob_history_:
+                self.q_prob_history_.append(self.q_prob_history_[-1].copy())
 
         self.best_bits_ = global_best_bits
         self.best_fitness_ = global_best_fitness
 
-        return {
+        res_dict = {
             "best_bits": self.best_bits_,
             "best_fitness": self.best_fitness_,
             "convergence_curve": self.convergence_curve_,
             "evaluations": self.evaluations_count_,
         }
+        if self.record_q_history:
+            res_dict["q_prob_history"] = self.q_prob_history_
+        return res_dict

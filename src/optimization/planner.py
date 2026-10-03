@@ -72,7 +72,17 @@ def optimize_fleet_plan(
     """
     t_start = time.time()
 
-    # 1. Setup problem if not supplied
+    # 1. Setup problem if not supplied or update weights if supplied
+    w_dict = None
+    if isinstance(weights, tuple) and len(weights) == 3:
+        w_dict = {"fuel": float(weights[0]), "cost": float(weights[1]), "emissions": float(weights[2])}
+    elif isinstance(weights, dict):
+        # Handle both w_fuel and fuel keys
+        f_val = weights.get("fuel", weights.get("w_fuel", 0.2))
+        c_val = weights.get("cost", weights.get("w_cost", 0.4))
+        e_val = weights.get("emissions", weights.get("w_emissions", 0.4))
+        w_dict = {"fuel": float(f_val), "cost": float(c_val), "emissions": float(e_val)}
+
     if problem is None:
         cand_opts = DEFAULT_CANDIDATE_OPTIONS
         if allowed_fuels is not None:
@@ -80,19 +90,19 @@ def optimize_fleet_plan(
             if not cand_opts:
                 cand_opts = DEFAULT_CANDIDATE_OPTIONS
 
-        w_dict = {"fuel": 0.2, "cost": 0.4, "emissions": 0.4}
-        if isinstance(weights, tuple) and len(weights) == 3:
-            w_dict = {"fuel": float(weights[0]), "cost": float(weights[1]), "emissions": float(weights[2])}
-        elif isinstance(weights, dict):
-            w_dict = weights
-
         problem = FleetOptimizationProblem(
             config=config,
             candidate_options=cand_opts,
-            weights=w_dict,
+            weights=w_dict or {"fuel": 0.2, "cost": 0.4, "emissions": 0.4},
             speed_cap_delta=speed_cap - 18.0,
             shore_power_forced=True if shore_power else False,
         )
+    elif w_dict is not None:
+        # Re-initialize weights on existing problem
+        w_sum = w_dict["fuel"] + w_dict["cost"] + w_dict["emissions"]
+        problem.w_fuel = w_dict["fuel"] / w_sum
+        problem.w_cost = w_dict["cost"] / w_sum
+        problem.w_emissions = w_dict["emissions"] / w_sum
 
     # 2. Compute Baselines (Feasible Naive & Best Conventional)
     naive_bits, naive_eval = get_naive_baseline(problem)

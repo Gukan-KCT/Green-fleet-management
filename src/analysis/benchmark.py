@@ -173,7 +173,17 @@ def run_benchmark_suite(
         feasibles = [1.0 if r["is_feasible"] else 0.0 for r in runs]
         evals = [r["evaluations"] for r in runs]
 
-        conv_matrix = np.array(convergence_histories[name])
+        # Pad or truncate convergence curves to generations length
+        padded_histories = []
+        for curve in convergence_histories[name]:
+            c_list = list(curve)
+            if len(c_list) < generations:
+                c_list.extend([c_list[-1]] * (generations - len(c_list)))
+            elif len(c_list) > generations:
+                c_list = c_list[:generations]
+            padded_histories.append(c_list)
+
+        conv_matrix = np.array(padded_histories, dtype=float)
         mean_convergence[name] = list(np.mean(conv_matrix, axis=0))
 
         summary_rows.append(

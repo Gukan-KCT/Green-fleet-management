@@ -1,6 +1,8 @@
 """
 Fleet Planner - Main Decision-Support Workspace.
 Interactive multi-objective fleet deployment, alternative fuels, and decarbonization engine.
+Includes Plan Insights card, interactive Pareto trade-off with knee point,
+and simplified carbon intensity proxy.
 """
 
 from __future__ import annotations
@@ -27,6 +29,8 @@ from app.ui.components import (
     render_kpi_row,
     render_constraints_table,
     render_oversupply_chips,
+    render_plan_insights_card,
+    render_carbon_intensity_badge,
 )
 from app.ui.charts import (
     build_network_map,
@@ -36,9 +40,10 @@ from app.ui.charts import (
     build_convergence_chart,
     build_pareto_chart,
 )
-from app.ui.state import get_or_load_plan, get_default_config
+from app.ui.state import get_or_load_plan, get_default_config, check_artifact_staleness
 from app.ui.css import inject_css
 from src.optimization.pareto import generate_pareto_frontier
+from src.analysis.decision_support import compute_pareto_knee_point
 from src.analysis.report import generate_standalone_html_report
 
 inject_css()
@@ -51,9 +56,10 @@ render_top_strip(
 
 cfg = get_default_config()
 
-# Presets Bar
-c_presets, c_dl = st.columns([4, 1])
-with c_presets:
+# Guided Demo Flow & Presets
+c_flow, c_dl = st.columns([4, 1])
+with c_flow:
+    st.caption("**Guided Workflow:** 1. Select Preset / Baseline &rarr; 2. Adjust Constraints &rarr; 3. Run Optimization &rarr; 4. Explore Trade-offs")
     p_cols = st.columns(6)
     preset_clicked = None
     if p_cols[0].button("Balanced", help="Equal focus on cost and emissions (0.2/0.4/0.4)", width="stretch"):
@@ -69,8 +75,14 @@ with c_presets:
     if p_cols[5].button("Demand +20%", help="Surge demand +20% on all corridors", width="stretch"):
         preset_clicked = "demand_surge"
 
-# --- 2. Sidebar Plan Settings ---
+# --- 2. Sidebar Plan Settings & URL Query State ---
 st.sidebar.markdown("### Plan Settings")
+
+# Handle URL query params if present
+params = st.query_params
+init_w_fuel = int(params.get("w_fuel", st.session_state.get("w_fuel_raw", 20)))
+init_w_cost = int(params.get("w_cost", st.session_state.get("w_cost_raw", 40)))
+init_w_emiss = int(params.get("w_emiss", st.session_state.get("w_emiss_raw", 40)))
 
 # Handle Presets in Session State
 if preset_clicked == "balanced":
@@ -92,17 +104,22 @@ elif preset_clicked == "min_fuel":
 
 st.sidebar.caption("**Objective Priorities** (auto-normalized to 1.0)")
 w_fuel_in = st.sidebar.slider(
-    "Fuel Weight", 0, 100, st.session_state.get("w_fuel_raw", 20), key="w_fuel_slider",
+    "Fuel Weight", 0, 100, st.session_state.get("w_fuel_raw", init_w_fuel), key="w_fuel_slider",
     help="Relative priority for minimizing bunker fuel consumption.",
 )
 w_cost_in = st.sidebar.slider(
-    "Cost Weight", 0, 100, st.session_state.get("w_cost_raw", 40), key="w_cost_slider",
+    "Cost Weight", 0, 100, st.session_state.get("w_cost_raw", init_w_cost), key="w_cost_slider",
     help="Relative priority for minimizing OPEX (bunker, charter, fees, carbon tax).",
 )
 w_emiss_in = st.sidebar.slider(
-    "Emissions Weight", 0, 100, st.session_state.get("w_emiss_raw", 40), key="w_emiss_slider",
+    "Emissions Weight", 0, 100, st.session_state.get("w_emiss_raw", init_w_emiss), key="w_emiss_slider",
     help="Relative priority for minimizing Well-to-Wake lifecycle emissions.",
 )
+
+# Update query parameters for shareability
+st.query_params["w_fuel"] = str(w_fuel_in)
+st.query_params["w_cost"] = str(w_cost_in)
+st.query_params["w_emiss"] = str(w_emiss_in)
 
 # Auto-normalize weights
 w_total = max(1e-6, w_fuel_in + w_cost_in + w_emiss_in)
@@ -151,6 +168,7 @@ if reset_clicked:
     st.session_state.pop("w_fuel_raw", None)
     st.session_state.pop("w_cost_raw", None)
     st.session_state.pop("w_emiss_raw", None)
+    st.query_params.clear()
     st.rerun()
 
 # --- 3. Compute or Retrieve Optimization Plan ---
@@ -189,18 +207,32 @@ with c_dl:
     )
 
 # Staleness Notice Check
-from app.ui.state import check_artifact_staleness
 if check_artifact_staleness("saved_case_study.pkl"):
     st.warning("Saved results are out of date, press Re-run to update.", icon="⚠️")
 
-# Plan Selection Status
-winner_status = plan.get("winner_status", "Green plan selected")
-if "Green plan selected" in winner_status:
-    st.success(f"**{winner_status}**: Multi-objective QIEA search identified a decarbonized fleet configuration dominating conventional operations.", icon="🌱")
-elif "Conventional plan retained" in winner_status:
-    st.info(f"**{winner_status}**.", icon="ℹ️")
-else:
-    st.info(f"**{winner_status}**.", icon="⚓")
+# Plan Selection Status & Carbon Intensity Rating Badge
+c_stat1, c_stat2 = st.columns([13, 7])
+with c_stat1:
+    winner_status = plan.get("winner_status", "Green plan selected")
+    if "Green plan selected" in winner_status:
+        st.success(f"**{winner_status}**: Multi-objective QIEA search identified a decarbonized fleet configuration dominating conventional operations.", icon="🌱")
+    elif "Conventional plan retained" in winner_status:
+        st.info(f"**{winner_status}**.", icon="ℹ️")
+    else:
+        st.info(f"**{winner_status}**.", icon="⚓")
+
+with c_stat2:
+    ci_val = opt_eval.get("carbon_intensity_g_tnm", 15.0)
+    render_carbon_intensity_badge(ci_val)
+
+# Plan Insights Card (Executive Data Summary)
+carbon_price_ref = float(cfg.get("general", {}).get("carbon_price_usd_per_tonne", 80.0))
+render_plan_insights_card(
+    opt_eval=opt_eval,
+    best_conv_eval=best_conv_eval,
+    problem=problem,
+    carbon_price_ref=carbon_price_ref,
+)
 
 # --- 4. Row 1: KPI Cards with Comparator Toggle ---
 c_comp, _ = st.columns([3, 7])
@@ -259,7 +291,7 @@ tab_emiss, tab_cost, tab_const, tab_conv, tab_pareto = st.tabs([
     "Cost Breakdown",
     "Constraints & Oversupply",
     "Convergence",
-    "Pareto Front",
+    "Trade-Off Explorer (Pareto)",
 ])
 
 with tab_emiss:
@@ -284,17 +316,46 @@ with tab_conv:
     st.plotly_chart(fig_conv, width="stretch")
 
 with tab_pareto:
-    st.caption("Generates non-dominated frontier across 15 weighted cost-vs-emission evaluations.")
-    if st.button("Generate Pareto Frontier"):
-        with st.spinner("Sweeping multi-objective trade-off weights..."):
-            df_pareto = generate_pareto_frontier(
-                problem=problem,
-                num_points=12,
-                pop_size=30,
-                generations=60,
-                random_seed=rand_seed,
+    st.markdown("**Multi-Objective Trade-Off Explorer & Knee-Point Analysis**")
+    st.caption("Evaluates the efficient frontier between Annual Operating Cost ($M) and Lifecycle CO2e (kt).")
+
+    if "pareto_data" not in st.session_state:
+        st.session_state["pareto_data"] = None
+
+    c_p1, c_p2 = st.columns([3, 7])
+    with c_p1:
+        calc_pareto = st.button("Generate Frontier", type="primary", width="stretch")
+    with c_p2:
+        st.caption("Knee Point identifies the policy maximizing marginal emissions reduction per dollar spent (minimum Euclidean distance to ideal utopia point in normalized objective space).")
+
+    if calc_pareto or st.session_state["pareto_data"] is not None:
+        if calc_pareto or st.session_state["pareto_data"] is None:
+            with st.spinner("Sweeping multi-objective trade-off frontier..."):
+                df_pareto = generate_pareto_frontier(
+                    problem=problem,
+                    num_points=12,
+                    pop_size=30,
+                    generations=60,
+                    random_seed=rand_seed,
+                )
+                st.session_state["pareto_data"] = df_pareto
+        else:
+            df_pareto = st.session_state["pareto_data"]
+
+        knee_pt = compute_pareto_knee_point(df_pareto)
+        fig_p = build_pareto_chart(
+            pareto_df=df_pareto,
+            naive_eval=naive_eval,
+            best_conv_eval=best_conv_eval,
+            knee_point=knee_pt,
+        )
+        st.plotly_chart(fig_p, width="stretch")
+
+        if knee_pt:
+            st.info(
+                f"**Knee Point Policy Identified:** Operating Cost **${knee_pt['Operating Cost ($M)']:.2f}M**, "
+                f"Lifecycle CO2e **{knee_pt['Lifecycle CO2e (kt)']:.2f} kt** "
+                f"(Weights: Cost {knee_pt.get('w_cost', 0.5):.2f}, CO2e {knee_pt.get('w_emiss', 0.5):.2f})."
             )
-            fig_p = build_pareto_chart(df_pareto)
-            st.plotly_chart(fig_p, width="stretch")
     else:
-        st.info("Click above to compute live Pareto front across cost and emission objectives.")
+        st.info("Click 'Generate Frontier' to evaluate the non-dominated Pareto frontier.")

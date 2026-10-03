@@ -1,12 +1,13 @@
 """
 Code and Configuration Hash Utility for Staleness and Freshness Verification.
 
-Computes a deterministic MD5 hash across all Python source files in src/
+Computes a deterministic SHA-256 hash across all Python source files in src/
 and configuration files in config/params.yaml.
 """
 
 from __future__ import annotations
 import hashlib
+import pickle
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -38,6 +39,11 @@ def compute_code_hash(project_root: Optional[Path] = None) -> str:
     return hasher.hexdigest()[:16]
 
 
+# Aliases for consistent naming across modules
+get_codebase_hash = compute_code_hash
+CURRENT_CODE_HASH = compute_code_hash()
+
+
 def verify_pkl_freshness(pkl_data: Any, current_hash: Optional[str] = None) -> bool:
     """
     Verifies if a loaded pickle dictionary contains a matching 'code_hash'.
@@ -50,3 +56,19 @@ def verify_pkl_freshness(pkl_data: Any, current_hash: Optional[str] = None) -> b
         return False
     curr = current_hash or compute_code_hash()
     return stored_hash == curr
+
+
+def check_artifact_staleness(filename: str, current_hash: Optional[str] = None) -> bool:
+    """
+    Checks if a pickle file on disk in data/ is stale relative to the active codebase hash.
+    Returns True if stale or missing, False if fresh.
+    """
+    data_path = PROJECT_ROOT / "data" / filename
+    if not data_path.exists():
+        return True
+    try:
+        with open(data_path, "rb") as f:
+            data = pickle.load(f)
+        return not verify_pkl_freshness(data, current_hash=current_hash)
+    except Exception:
+        return True

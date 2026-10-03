@@ -95,7 +95,7 @@ def main():
     print(f"  Completed & saved Case Study ({time.time() - t0:.2f}s).")
 
     # 5. Techno-Economic Analyses (Fuels and Shore Power)
-    print("\n[5/5] Running Techno-Economic Analyses (Alternative Fuels & Shore Power)...")
+    print("\n[5/7] Running Techno-Economic Analyses (Alternative Fuels & Shore Power)...")
     shore_res = analyze_shore_power_fleet(case_res["balanced_eval"])
     shore_res["code_hash"] = code_hash
     with open(data_dir / "saved_shore_power.pkl", "wb") as f:
@@ -106,9 +106,44 @@ def main():
         pickle.dump(fuels_pkg, f)
     print("  Completed & saved Techno-Economic Analyses.")
 
-    # 6. Generate docs/EXPERIMENTAL_RESULTS.md purely from computed data
+    # 6. Decision-Support Precomputations (Break-Even Sensitivity Grid, Robustness, Q-Bit Superposition History)
+    print("\n[6/7] Running Decision-Support Precomputations (Break-even heatmap & Robustness analysis)...")
+    from src.analysis.decision_support import compute_breakeven_grid, compute_optimizer_robustness
+    from src.optimization.qiea import QIEA
+
+    breakeven_res = compute_breakeven_grid(problem_base=prob_med, pop_size=20, generations=30, random_seed=42)
+    breakeven_res["code_hash"] = code_hash
+    with open(data_dir / "saved_breakeven_grid.pkl", "wb") as f:
+        pickle.dump(breakeven_res, f)
+
+    robust_res = compute_optimizer_robustness(problem=prob_med, num_seeds=10, pop_size=25, generations=35, seed_base=100)
+    robust_res["code_hash"] = code_hash
+    with open(data_dir / "saved_robustness.pkl", "wb") as f:
+        pickle.dump(robust_res, f)
+
+    # Q-bit probability history for visualizer
+    q_vis = QIEA(
+        n_bits=prob_med.n_bits,
+        pop_size=30,
+        generations=60,
+        random_seed=42,
+        initial_theta=prob_med.get_initial_q_angles(),
+        record_q_history=True,
+    )
+    q_vis_res = q_vis.optimize(prob_med.fitness_function)
+    q_pkg = {
+        "q_prob_history": q_vis_res.get("q_prob_history", []),
+        "convergence_curve": q_vis_res.get("convergence_curve", []),
+        "best_bits": q_vis_res.get("best_bits"),
+        "code_hash": code_hash,
+    }
+    with open(data_dir / "saved_q_history.pkl", "wb") as f:
+        pickle.dump(q_pkg, f)
+    print("  Completed & saved Decision-Support Precomputations.")
+
+    # 7. Generate docs/EXPERIMENTAL_RESULTS.md purely from computed data
     docs_path = PROJECT_ROOT / "docs" / "EXPERIMENTAL_RESULTS.md"
-    print(f"\nWriting experimental results markdown to {docs_path}...")
+    print(f"\n[7/7] Writing experimental results markdown to {docs_path}...")
 
     total_runtime = time.time() - t_start
     md_content = generate_markdown_report(
