@@ -140,11 +140,11 @@ if has_alt_fuels:
         help="Upstream production carbon accounting methodology.",
     )
 
-# Control 3: Shore Power Toggle
+# Control 3: Shore Power Optimization Decision Variable Toggle
 shore_power_toggle = st.sidebar.checkbox(
-    "Enable Port Shore Power (Cold Ironing)",
+    "Allow optimizer to use shore power",
     value=True,
-    help="Allow vessels equipped with shore connections to connect at equipped berths.",
+    help="When enabled, UseShorePower[port,vessel] ∈ {0,1} decision variable is active where terminals support HVSC.",
 )
 
 # --- Collapsed Expander 1: Fine-Tune Objectives ---

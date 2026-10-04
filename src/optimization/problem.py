@@ -295,6 +295,16 @@ class FleetOptimizationProblem:
                 speeds[r_key] = 11.5
                 modified = True
 
+        # 3. Shore power feasibility repair
+        # Reject impossible shore power selections where port lacks shore power infrastructure
+        ports_cfg = self.config.get("ports", {})
+        for p_key in self.port_keys:
+            if shore_power.get(p_key, False):
+                port_has_sp = bool(ports_cfg.get(p_key, {}).get("has_shore_power", False))
+                if not port_has_sp:
+                    shore_power[p_key] = False
+                    modified = True
+
         if not modified:
             return bits
         return self.encode_solution(allocations, speeds, shore_power)
@@ -322,6 +332,7 @@ class FleetOptimizationProblem:
             "vessel_compatibility": 0.0,
             "carbon_intensity": 0.0,
             "supply_cap": 0.0,
+            "shore_power": 0.0,
         }
 
         # Track fleet usage across routes by vessel type
@@ -338,11 +349,21 @@ class FleetOptimizationProblem:
             if used_count > avail:
                 constraint_violations["vessel_availability"] += float(used_count - avail)
 
+        # Check shore power constraint: Reject UseShorePower=1 on ports without shore power infrastructure
+        ports_dict = self.config.get("ports", {})
+        for p_key, sp_selected in shore_power.items():
+            if sp_selected:
+                p_has_ops = bool(ports_dict.get(p_key, {}).get("has_shore_power", False))
+                if not p_has_ops:
+                    constraint_violations["shore_power"] += 1.0  # Penalty for invalid selection
+
         # Route-by-route evaluations
         total_ttw_emissions = 0.0
         total_wtt_emissions = 0.0
         total_slip_emissions = 0.0
         total_berth_emissions = 0.0
+        total_berth_fuel_saved = 0.0
+        total_berth_mwh_consumed = 0.0
         route_details = {}
 
         for r_idx, r_key in enumerate(self.route_keys):
@@ -463,9 +484,14 @@ class FleetOptimizationProblem:
 
                 ann_berth_cost = ann_trips * (berth_orig["cost_usd"] + berth_dest["cost_usd"])
                 ann_berth_emissions = ann_trips * (berth_orig["emissions_co2e"] + berth_dest["emissions_co2e"])
+                ann_berth_fuel_saved = ann_trips * (berth_orig.get("fuel_saved_tonnes", 0.0) + berth_dest.get("fuel_saved_tonnes", 0.0))
+                ann_berth_mwh = ann_trips * (berth_orig.get("mwh_consumed", 0.0) if berth_orig.get("ops_active") else 0.0) + \
+                                ann_trips * (berth_dest.get("mwh_consumed", 0.0) if berth_dest.get("ops_active") else 0.0)
 
                 total_emissions_co2e += ann_berth_emissions
                 total_berth_emissions += ann_berth_emissions
+                total_berth_fuel_saved += ann_berth_fuel_saved
+                total_berth_mwh_consumed += ann_berth_mwh
                 route_berth_emiss += ann_berth_emissions
 
                 total_operating_cost += ann_fuel_cost + ann_charter_cost + ann_port_fees + ann_berth_cost
@@ -584,6 +610,11 @@ class FleetOptimizationProblem:
             "shore_power": shore_power,
             "route_details": route_details,
             "vessels_used_by_type": vessels_used_by_type,
+            "shore_power_metrics": {
+                "berth_fuel_saved_tonnes": float(total_berth_fuel_saved),
+                "berth_electricity_mwh": float(total_berth_mwh_consumed),
+                "berth_emissions_co2e_tonnes": float(total_berth_emissions),
+            },
             "emissions_breakdown": {
                 "ttw_co2e_tonnes": float(total_ttw_emissions),
                 "wtt_co2e_tonnes": float(total_wtt_emissions),

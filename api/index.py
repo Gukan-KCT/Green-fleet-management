@@ -565,14 +565,108 @@ def get_emission_profiles():
         "disclaimer": "Scientific values preserved from official regulatory studies (IMO MEPC, ICCT, GREET). Unverified entries labeled as 'Illustrative project assumptions'.",
     })
 
+from src.analysis.shore_power import calculate_ops_tradeoff, analyze_shore_power_fleet
+
+
 @app.get("/api/shore-power")
-def get_shore_power():
-    """Returns cold-ironing port connectivity, tariff, and auxiliary emissions displacement."""
+def get_shore_power(
+    port: Optional[str] = Query(None),
+    vessel: str = Query("handymax_feeder"),
+    berth_hours: Optional[float] = Query(None, ge=0.5, le=168.0),
+    shore_power_available: Optional[bool] = Query(None),
+    electricity_price: Optional[float] = Query(None, ge=0.0, le=1000.0),
+    aux_power_kw: Optional[float] = Query(None, ge=10.0, le=10000.0),
+    efficiency: float = Query(0.95, ge=0.5, le=1.0),
+    min_berth_hours: float = Query(2.0, ge=0.0, le=24.0),
+    compare_plans: bool = Query(False),
+):
+    """
+    Returns cold-ironing port connectivity, tariff, auxiliary emissions displacement,
+    interactive single-port OPS tradeoff calculator, and Plan A (No OPS) vs Plan B (With OPS) optimizer comparison.
+    """
     saved = load_pkl("saved_shore_power.pkl")
     cfg = load_config()
+    ports = cfg.get("ports", {})
+    vessels = cfg.get("vessel_types", {})
+
+    # 1. Single Port OPS Tradeoff Calculation
+    selected_port = port if (port and port in ports) else "mumbai"
+    tradeoff = calculate_ops_tradeoff(
+        port_id=selected_port,
+        vessel_type=vessel if vessel in vessels else "handymax_feeder",
+        berth_hours=berth_hours,
+        shore_power_available=shore_power_available,
+        electricity_price_usd_per_mwh=electricity_price,
+        aux_power_demand_kw=aux_power_kw,
+        connection_efficiency=efficiency,
+        min_berth_hours=min_berth_hours,
+        config=cfg,
+    )
+
+    # 2. Plan A (No OPS) vs Plan B (With OPS where available) Optimization Comparison
+    plan_comparison = None
+    if compare_plans:
+        try:
+            # Plan A: No Shore Power
+            plan_a_res = optimize_fleet_plan(
+                shore_power=False,
+                num_qiea_starts=2,
+                evals_per_start=800,
+                seeds=[42, 43],
+                config=cfg,
+            )
+            # Plan B: With Shore Power
+            plan_b_res = optimize_fleet_plan(
+                shore_power=True,
+                num_qiea_starts=2,
+                evals_per_start=800,
+                seeds=[42, 43],
+                config=cfg,
+            )
+
+            eval_a = plan_a_res["selected_plan"]
+            eval_b = plan_b_res["selected_plan"]
+
+            fuel_a = eval_a.get("total_fuel_tonnes_hfo_eq", 0.0)
+            fuel_b = eval_b.get("total_fuel_tonnes_hfo_eq", 0.0)
+            cost_a = eval_a.get("total_operating_cost_usd", 0.0)
+            cost_b = eval_b.get("total_operating_cost_usd", 0.0)
+            emiss_a = eval_a.get("total_emissions_co2e_tonnes", 0.0)
+            emiss_b = eval_b.get("total_emissions_co2e_tonnes", 0.0)
+
+            plan_comparison = {
+                "plan_a_no_ops": {
+                    "fuel_tonnes": round(fuel_a, 1),
+                    "operating_cost_usd": round(cost_a, 0),
+                    "lifecycle_co2e_tonnes": round(emiss_a, 1),
+                    "berth_fuel_saved": 0.0,
+                    "berth_electricity_mwh": 0.0,
+                    "shore_power_used": False,
+                },
+                "plan_b_with_ops": {
+                    "fuel_tonnes": round(fuel_b, 1),
+                    "operating_cost_usd": round(cost_b, 0),
+                    "lifecycle_co2e_tonnes": round(emiss_b, 1),
+                    "berth_fuel_saved": round(eval_b.get("shore_power_metrics", {}).get("berth_fuel_saved_tonnes", 0.0), 1),
+                    "berth_electricity_mwh": round(eval_b.get("shore_power_metrics", {}).get("berth_electricity_mwh", 0.0), 1),
+                    "shore_power_used": True,
+                },
+                "deltas": {
+                    "fuel_saved_tonnes": round(fuel_a - fuel_b, 1),
+                    "cost_diff_usd": round(cost_a - cost_b, 0),
+                    "co2e_avoided_tonnes": round(emiss_a - emiss_b, 1),
+                    "co2e_reduction_pct": round(((emiss_a - emiss_b) / max(1e-4, emiss_a)) * 100.0, 2),
+                }
+            }
+        except Exception as ex:
+            plan_comparison = {"error": str(ex)}
+
     return clean_json({
         "data": saved,
-        "ports": cfg.get("ports", {}),
+        "ports": ports,
+        "vessels": vessels,
+        "tradeoff_calculator": tradeoff,
+        "plan_comparison": plan_comparison,
     })
 
 @app.get("/api/scenarios")

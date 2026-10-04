@@ -1356,6 +1356,13 @@ body {
               <input type="number" class="form-control" id="input-speed-cap" value="18.0" step="0.5" min="10" max="25">
             </div>
           </div>
+          <div style="margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px solid var(--slate-100); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--slate-800); cursor: pointer;">
+              <input type="checkbox" id="check-allow-shore-power" checked style="width: 17px; height: 17px; accent-color: var(--teal);">
+              <span>Allow optimizer to use shore power (OPS / Cold Ironing)</span>
+            </label>
+            <span style="font-size: 0.75rem; color: var(--slate-500);">When enabled, UseShorePower[port,vessel] ∈ {0,1} decision variable is active where terminals support HVSC.</span>
+          </div>
         </div>
 
         <!-- KPIs Row -->
@@ -1980,15 +1987,203 @@ body {
 
       <!-- ================= 4. SHORE POWER VIEW ================= -->
       <section id="page-shore" class="view-panel" style="display: none;">
+        <!-- Single-Port / Vessel Interactive OPS Calculator Card -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Port Cold-Ironing Terminal Grid Analysis</div>
-            <div class="card-subtitle">Auxiliary diesel generator displacement vs municipal grid factor</div>
+            <div class="card-title">Port Berthing & Shore Power (OPS / Cold Ironing) Calculator</div>
+            <div class="card-subtitle">
+              Simulate vessel port arrival → auxiliary hoteling energy demand → shore power connection → avoided fuel & emissions
+            </div>
+          </div>
+          
+          <div class="controls-row">
+            <div class="form-group">
+              <label for="ops-port">Port Terminal</label>
+              <select class="form-control" id="ops-port">
+                <option value="mumbai" selected>Port of Nhava Sheva (Mumbai) - OPS Available</option>
+                <option value="kochi">Port of Kochi - OPS Available</option>
+                <option value="chennai">Chennai Port - OPS Available</option>
+                <option value="colombo">Port of Colombo - OPS Available</option>
+                <option value="singapore">Port of Singapore - OPS Available</option>
+                <option value="tuticorin">V.O. Chidambaranar Port (Tuticorin) - No OPS</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ops-vessel">Vessel Archetype</label>
+              <select class="form-control" id="ops-vessel">
+                <option value="handymax_feeder" selected>Handymax Feeder (650 kW aux)</option>
+                <option value="small_feeder">Small Feeder (400 kW aux)</option>
+                <option value="sub_panamax_feeder">Sub-Panamax (900 kW aux)</option>
+                <option value="panamax_feeder">Panamax Feeder (1,200 kW aux)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ops-berth-hours">Berthing Duration (hours)</label>
+              <input type="number" class="form-control" id="ops-berth-hours" value="24" min="1" max="168" step="1">
+            </div>
+            <div class="form-group">
+              <label for="ops-available-override">Shore Power Available?</label>
+              <select class="form-control" id="ops-available-override">
+                <option value="auto" selected>Auto (Port Infrastructure)</option>
+                <option value="yes">Yes (Forced Available)</option>
+                <option value="no">No (Unavailable / Out of Service)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="controls-row">
+            <div class="form-group">
+              <label for="ops-aux-kw">Auxiliary Hoteling Load (kW)</label>
+              <input type="number" class="form-control" id="ops-aux-kw" value="650" min="50" max="5000" step="50">
+            </div>
+            <div class="form-group">
+              <label for="ops-tariff">Electricity Tariff ($/MWh)</label>
+              <input type="number" class="form-control" id="ops-tariff" value="120" min="20" max="500" step="5">
+            </div>
+            <div class="form-group">
+              <label for="ops-eff">Connection Efficiency (η): <span id="val-ops-eff" style="color: var(--teal); font-weight: 700;">95%</span></label>
+              <input type="range" class="form-control" id="ops-eff" min="80" max="100" value="95" step="1">
+            </div>
+            <div class="form-group" style="display: flex; align-items: flex-end;">
+              <button class="btn btn-primary" id="btn-calc-ops" onclick="runSinglePortOpsCalculation()" style="width: 100%; background: var(--teal); border-color: var(--teal); height: 38px; font-weight: 700;">
+                ⚡ Recalculate Berth Tradeoff
+              </button>
+            </div>
+          </div>
+
+          <!-- Alert / Rejection Banner -->
+          <div id="ops-rejection-banner" style="display: none; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 0.75rem; font-size: 0.82rem; font-weight: 600;"></div>
+
+          <!-- Side-by-Side Tradeoff Comparison: WITHOUT OPS vs WITH OPS -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.25rem;">
+            <!-- Column 1: WITHOUT OPS -->
+            <div style="background: #fff; border: 2px solid #e2e8f0; border-radius: 8px; padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                <h4 style="font-size: 0.9rem; font-weight: 700; color: #475569;">WITHOUT OPS (Aux Diesel Generator)</h4>
+                <span class="status-badge" style="background: #f1f5f9; color: #475569;">Status Quo</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--slate-600); display: flex; flex-direction: column; gap: 0.5rem;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Auxiliary Power Source:</span>
+                  <b>Onboard MGO Generator</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Aux Fuel Consumption:</span>
+                  <b id="ops-res-no-fuel" style="color: #b45309;">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Aux Fuel Cost:</span>
+                  <b id="ops-res-no-cost" style="color: #0f172a;">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Berth CO2e Emissions:</span>
+                  <b id="ops-res-no-co2" style="color: #b91c1c;">-</b>
+                </div>
+              </div>
+            </div>
+
+            <!-- Column 2: WITH OPS -->
+            <div style="background: #f0fdf4; border: 2px solid #86efac; border-radius: 8px; padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #bbf7d0; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                <h4 style="font-size: 0.9rem; font-weight: 700; color: #166534;">WITH OPS (Shore Power Grid)</h4>
+                <span class="status-badge status-pass" id="ops-res-with-badge">Cold Ironing Active</span>
+              </div>
+              <div style="font-size: 0.8rem; color: #14532d; display: flex; flex-direction: column; gap: 0.5rem;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Electricity Consumption:</span>
+                  <b id="ops-res-with-elec">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Electricity Cost:</span>
+                  <b id="ops-res-with-cost">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Berth CO2e Emissions:</span>
+                  <b id="ops-res-with-co2">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Aux Engine Fuel:</span>
+                  <b>0.00 t (Displaced)</b>
+                </div>
+              </div>
+            </div>
+
+            <!-- Column 3: NET TRADEOFF / DELTAS -->
+            <div style="background: #f0fdfa; border: 2px solid #5eead4; border-radius: 8px; padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccfbf1; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                <h4 style="font-size: 0.9rem; font-weight: 700; color: #0f766e;">NET TRADEOFF (Realized Benefit)</h4>
+                <span class="status-badge" style="background: #ccfbf1; color: #0f766e;" id="ops-res-delta-badge">Calculated</span>
+              </div>
+              <div style="font-size: 0.8rem; color: #134e4a; display: flex; flex-direction: column; gap: 0.5rem;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Avoided Aux Fuel:</span>
+                  <b id="ops-res-delta-fuel" style="color: #0d9488;">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Cost Difference:</span>
+                  <b id="ops-res-delta-cost">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>CO2e Avoided:</span>
+                  <b id="ops-res-delta-co2" style="color: #0d9488;">-</b>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Percentage Reduction:</span>
+                  <b id="ops-res-delta-pct" style="font-size: 0.95rem; color: #047857;">-</b>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Optimizer Integration Card: Plan A vs Plan B -->
+        <div class="card" style="border: 2px solid var(--teal);">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <div class="card-title" style="color: var(--teal); display: flex; align-items: center; gap: 0.5rem;">
+                <span>🎯 Optimization Engine Comparison: Plan A vs Plan B</span>
+              </div>
+              <div class="card-subtitle">
+                Compare fleet-wide deployment: Plan A (No shore power) vs Plan B (Use shore power where available: UseShorePower[p,v] ∈ {0,1})
+              </div>
+            </div>
+            <button class="btn btn-outline" id="btn-run-plan-comparison" onclick="runPlanComparisonOptimization()" style="border-color: var(--teal); color: var(--teal); font-weight: 700;">
+              ▶ Run Plan A vs Plan B Optimization Benchmark
+            </button>
+          </div>
+
+          <div id="plan-comp-loading" style="display: none; padding: 1.5rem; text-align: center; color: var(--slate-600); font-size: 0.85rem;">
+            Running multi-objective quantum-inspired optimization for Plan A and Plan B...
+          </div>
+
+          <div id="plan-comp-container" style="display: none; margin-top: 1rem;">
+            <div class="table-responsive">
+              <table class="data-table" id="table-plan-comparison">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Plan A (No Shore Power)</th>
+                    <th>Plan B (With Shore Power Allowed)</th>
+                    <th>Net Optimization Delta</th>
+                    <th>Impact / Status</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-plan-comparison">
+                  <!-- Injected via JavaScript -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Regional Terminals Status Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Regional Port Cold-Ironing Terminal Grid Analysis</div>
+            <div class="card-subtitle">Auxiliary diesel generator displacement vs municipal grid factor across South Asian hub network</div>
           </div>
           <div id="chart-shore-emiss" class="chart-container"></div>
-        </div>
-        <div class="card">
-          <div class="table-responsive">
+          <div class="table-responsive" style="margin-top: 1rem;">
             <table class="data-table" id="table-shore">
               <thead>
                 <tr>
@@ -3705,34 +3900,367 @@ async function loadFuels() {
 }
 
 // ================= 4. SHORE POWER LOGIC =================
+let shorePowerInitialized = false;
+
 async function loadShorePower() {
   try {
     const res = await fetch('/api/shore-power');
     const d = await res.json();
     const ports = d.ports || {};
-    const pBreakdown = d.data?.port_breakdown || [];
+    const tradeoff = d.tradeoff_calculator;
 
-    const tbody = document.querySelector('#table-shore tbody');
-    tbody.innerHTML = '';
-    Object.entries(ports).forEach(([pid, pinfo]) => {
-      const tr = document.createElement('tr');
-      const hasSP = pinfo.has_shore_power;
-      tr.innerHTML = `
-        <td><b>${pinfo.name}</b></td>
-        <td><span class="status-badge ${hasSP ? 'status-pass' : 'status-fail'}">${hasSP ? 'READY' : 'UNAVAILABLE'}</span></td>
-        <td>${pinfo.grid_ef_tonnes_per_mwh || 0.65}</td>
-        <td>$${pinfo.electricity_price_usd_per_mwh || 120}</td>
-        <td>${hasSP ? '1,420 t' : '0 t'}</td>
-        <td>${hasSP ? '-$35,000' : '$0'}</td>
-      `;
-      tbody.appendChild(tr);
+    renderShorePowerTerminalTable(ports, d.data?.port_breakdown);
+    if (tradeoff) {
+      renderSinglePortOpsResult(tradeoff);
+    }
+
+    if (!shorePowerInitialized) {
+      initShorePowerEventListeners(ports);
+      shorePowerInitialized = true;
+    }
+  } catch (err) {
+    console.error('Error loading shore power:', err);
+  }
+}
+
+function initShorePowerEventListeners(ports) {
+  const portSelect = document.getElementById('ops-port');
+  const vesselSelect = document.getElementById('ops-vessel');
+  const berthHoursInput = document.getElementById('ops-berth-hours');
+  const overrideSelect = document.getElementById('ops-available-override');
+  const auxKwInput = document.getElementById('ops-aux-kw');
+  const tariffInput = document.getElementById('ops-tariff');
+  const effRange = document.getElementById('ops-eff');
+  const effVal = document.getElementById('val-ops-eff');
+  const calcBtn = document.getElementById('btn-calc-ops');
+  const planCompBtn = document.getElementById('btn-run-plan-comparison');
+
+  // Update efficiency label on slider move
+  if (effRange && effVal) {
+    effRange.addEventListener('input', () => {
+      effVal.textContent = `${effRange.value}%`;
     });
+  }
 
-    Plotly.newPlot('chart-shore-emiss', [{
+  // Auto-sync port defaults when port changes
+  if (portSelect) {
+    portSelect.addEventListener('change', () => {
+      const pId = portSelect.value;
+      const pInfo = ports[pId];
+      if (pInfo) {
+        if (pInfo.berth_hours_avg) berthHoursInput.value = pInfo.berth_hours_avg;
+        if (pInfo.electricity_price_usd_per_mwh) tariffInput.value = pInfo.electricity_price_usd_per_mwh;
+      }
+      runSinglePortOpsCalculation();
+    });
+  }
+
+  // Auto-sync vessel auxiliary load when vessel changes
+  if (vesselSelect) {
+    vesselSelect.addEventListener('change', () => {
+      const auxMap = {
+        small_feeder: 400,
+        handymax_feeder: 650,
+        sub_panamax_feeder: 900,
+        panamax_feeder: 1200
+      };
+      if (auxMap[vesselSelect.value]) {
+        auxKwInput.value = auxMap[vesselSelect.value];
+      }
+      runSinglePortOpsCalculation();
+    });
+  }
+
+  if (calcBtn) {
+    calcBtn.addEventListener('click', runSinglePortOpsCalculation);
+  }
+
+  if (planCompBtn) {
+    planCompBtn.addEventListener('click', runPlanComparisonOptimization);
+  }
+}
+
+async function runSinglePortOpsCalculation() {
+  const port = document.getElementById('ops-port')?.value || 'mumbai';
+  const vessel = document.getElementById('ops-vessel')?.value || 'handymax_feeder';
+  const berthHours = parseFloat(document.getElementById('ops-berth-hours')?.value || 24);
+  const override = document.getElementById('ops-available-override')?.value || 'auto';
+  const auxKw = parseFloat(document.getElementById('ops-aux-kw')?.value || 650);
+  const tariff = parseFloat(document.getElementById('ops-tariff')?.value || 120);
+  const eff = parseFloat(document.getElementById('ops-eff')?.value || 95) / 100;
+
+  let spAvailParam = '';
+  if (override === 'yes') spAvailParam = '&shore_power_available=true';
+  if (override === 'no') spAvailParam = '&shore_power_available=false';
+
+  const btn = document.getElementById('btn-calc-ops');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Calculating...';
+  }
+
+  try {
+    const url = `/api/shore-power?port=${port}&vessel=${vessel}&berth_hours=${berthHours}&electricity_price=${tariff}&aux_power_kw=${auxKw}&efficiency=${eff}${spAvailParam}`;
+    const res = await fetch(url);
+    const d = await res.json();
+    if (d.tradeoff_calculator) {
+      renderSinglePortOpsResult(d.tradeoff_calculator);
+      if (btn) {
+        btn.textContent = '✓ Updated Just Now!';
+        btn.style.background = '#059669';
+        setTimeout(() => {
+          btn.textContent = '⚡ Recalculate Berth Tradeoff';
+          btn.style.background = 'var(--teal)';
+        }, 1200);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to calculate OPS tradeoff:', err);
+    if (btn) {
+      btn.textContent = '⚠️ Error Calculating';
+      btn.style.background = '#dc2626';
+      setTimeout(() => {
+        btn.textContent = '⚡ Recalculate Berth Tradeoff';
+        btn.style.background = 'var(--teal)';
+      }, 1500);
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+    }
+  }
+}
+
+function renderSinglePortOpsResult(t) {
+  const withoutOps = t.without_ops || {};
+  const withOps = t.with_ops || {};
+  const tradeoff = t.tradeoff || {};
+
+  // 1. WITHOUT OPS Card
+  const noFuelEl = document.getElementById('ops-res-no-fuel');
+  const noCostEl = document.getElementById('ops-res-no-cost');
+  const noCo2El = document.getElementById('ops-res-no-co2');
+  if (noFuelEl) noFuelEl.textContent = `${(withoutOps.fuel_consumption_tonnes || 0).toFixed(3)} t MGO`;
+  if (noCostEl) noCostEl.textContent = fmtCurr(withoutOps.fuel_cost_usd || 0);
+  if (noCo2El) noCo2El.textContent = `${(withoutOps.co2e_tonnes || 0).toFixed(2)} t CO2e`;
+
+  // 2. WITH OPS Card
+  const withBadge = document.getElementById('ops-res-with-badge');
+  const withElecEl = document.getElementById('ops-res-with-elec');
+  const withCostEl = document.getElementById('ops-res-with-cost');
+  const withCo2El = document.getElementById('ops-res-with-co2');
+  if (t.ops_feasible) {
+    if (withBadge) {
+      withBadge.textContent = 'Cold Ironing Active';
+      withBadge.className = 'status-badge status-pass';
+    }
+    if (withElecEl) withElecEl.textContent = `${(withOps.electricity_consumption_mwh || 0).toFixed(2)} MWh (${Math.round(withOps.electricity_consumption_kwh || 0).toLocaleString()} kWh)`;
+    if (withCostEl) withCostEl.textContent = fmtCurr(withOps.electricity_cost_usd || 0);
+    if (withCo2El) withCo2El.textContent = `${(withOps.co2e_tonnes || 0).toFixed(2)} t CO2e`;
+  } else {
+    if (withBadge) {
+      withBadge.textContent = 'Connection Rejected';
+      withBadge.className = 'status-badge status-fail';
+    }
+    if (withElecEl) withElecEl.textContent = '0.00 MWh (Infeasible)';
+    if (withCostEl) withCostEl.textContent = '$0 (Generator fallback)';
+    if (withCo2El) withCo2El.textContent = 'N/A (Generator required)';
+  }
+
+  // 3. NET TRADEOFF Card
+  const deltaBadge = document.getElementById('ops-res-delta-badge');
+  const deltaFuelEl = document.getElementById('ops-res-delta-fuel');
+  const deltaCostEl = document.getElementById('ops-res-delta-cost');
+  const deltaCo2El = document.getElementById('ops-res-delta-co2');
+  const deltaPctEl = document.getElementById('ops-res-delta-pct');
+
+  if (t.ops_feasible) {
+    if (deltaBadge) {
+      deltaBadge.textContent = 'Achieved';
+      deltaBadge.className = 'status-badge status-pass';
+    }
+    if (deltaFuelEl) deltaFuelEl.textContent = `+${(tradeoff.fuel_saved_tonnes || 0).toFixed(3)} t MGO`;
+    
+    const costDiff = tradeoff.cost_difference_usd || 0;
+    if (deltaCostEl) {
+      if (costDiff >= 0) {
+        deltaCostEl.textContent = `+$${Math.round(costDiff).toLocaleString()} (Net Savings)`;
+        deltaCostEl.style.color = '#047857';
+      } else {
+        deltaCostEl.textContent = `-$${Math.round(Math.abs(costDiff)).toLocaleString()} (Electricity Premium)`;
+        deltaCostEl.style.color = '#b45309';
+      }
+    }
+
+    if (deltaCo2El) deltaCo2El.textContent = `${(tradeoff.co2e_avoided_tonnes || 0).toFixed(2)} t CO2e avoided`;
+    if (deltaPctEl) deltaPctEl.textContent = `-${(tradeoff.percentage_reduction || 0).toFixed(1)}% Emissions`;
+  } else {
+    if (deltaBadge) {
+      deltaBadge.textContent = 'Zero Benefit';
+      deltaBadge.className = 'status-badge status-fail';
+    }
+    if (deltaFuelEl) deltaFuelEl.textContent = '0.00 t';
+    if (deltaCostEl) {
+      deltaCostEl.textContent = '$0';
+      deltaCostEl.style.color = '';
+    }
+    if (deltaCo2El) deltaCo2El.textContent = '0.00 t';
+    if (deltaPctEl) deltaPctEl.textContent = '0.0%';
+  }
+
+  // Rejection Banner
+  const banner = document.getElementById('ops-rejection-banner');
+  if (banner) {
+    if (!t.ops_feasible) {
+      banner.style.display = 'block';
+      banner.style.background = '#fef2f2';
+      banner.style.border = '1px solid #f87171';
+      banner.style.color = '#991b1b';
+      banner.innerHTML = `⚠️ <b>OPS Connection Infeasible / Rejected</b>: ${t.rejection_reason || 'Terminal lacks shore power infrastructure.'} Auxiliary generator burning MGO will operate during the entire berthing window.`;
+    } else {
+      banner.style.display = 'block';
+      banner.style.background = '#f0fdf4';
+      banner.style.border = '1px solid #86efac';
+      banner.style.color = '#166534';
+      banner.innerHTML = `✅ <b>OPS Available & Connected</b>: Port ${t.port_name} supports High-Voltage Shore Connection (HVSC). Auxiliary generator is shut down, eliminating hoteling fuel burn and cutting port emissions by <b>${(tradeoff.percentage_reduction || 0).toFixed(1)}%</b>.`;
+    }
+  }
+}
+
+async function runPlanComparisonOptimization() {
+  const btn = document.getElementById('btn-run-plan-comparison');
+  const loading = document.getElementById('plan-comp-loading');
+  const container = document.getElementById('plan-comp-container');
+  const tbody = document.getElementById('tbody-plan-comparison');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Running Multi-Objective Optimization...';
+  }
+  if (loading) {
+    loading.style.display = 'block';
+    loading.innerHTML = '<span class="spinner" style="vertical-align:middle;margin-right:8px;"></span> Computing Plan A vs Plan B optimization tradeoff on classical CPU...';
+  }
+  if (container) container.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/shore-power?compare_plans=true');
+    const d = await res.json();
+    const comp = d.plan_comparison;
+
+    if (!comp || comp.error) {
+      if (loading) loading.innerHTML = `<span style="color:#b91c1c;">Optimization comparison failed: ${comp?.error || 'Unknown error'}</span>`;
+      return;
+    }
+
+    const a = comp.plan_a_no_ops || {};
+    const b = comp.plan_b_with_ops || {};
+    const deltas = comp.deltas || {};
+
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td><b>Total Bunker & Auxiliary Fuel</b></td>
+          <td>${fmtNum(a.fuel_tonnes)} tonnes</td>
+          <td>${fmtNum(b.fuel_tonnes)} tonnes</td>
+          <td><b style="color:var(--teal);">-${fmtNum(deltas.fuel_saved_tonnes)} tonnes</b></td>
+          <td><span class="status-badge status-pass">Reduced MGO Burn</span></td>
+        </tr>
+        <tr>
+          <td><b>Annual Operating Cost</b></td>
+          <td>${fmtCurr(a.operating_cost_usd)}</td>
+          <td>${fmtCurr(b.operating_cost_usd)}</td>
+          <td><b>${deltas.cost_diff_usd >= 0 ? '-' : '+'}${fmtCurr(Math.abs(deltas.cost_diff_usd))}</b></td>
+          <td><span class="status-badge ${deltas.cost_diff_usd >= 0 ? 'status-pass' : 'status-amber'}">${deltas.cost_diff_usd >= 0 ? 'Net Cost Savings' : 'Electricity Tariff Tradeoff'}</span></td>
+        </tr>
+        <tr>
+          <td><b>Lifecycle GHG Emissions (WtW)</b></td>
+          <td>${fmtNum(a.lifecycle_co2e_tonnes)} t CO2e</td>
+          <td>${fmtNum(b.lifecycle_co2e_tonnes)} t CO2e</td>
+          <td><b style="color:var(--teal);">-${fmtNum(deltas.co2e_avoided_tonnes)} t CO2e (-${deltas.co2e_reduction_pct}%)</b></td>
+          <td><span class="status-badge status-pass">Decarbonized Berthing</span></td>
+        </tr>
+        <tr>
+          <td><b>Displaced Auxiliary MGO at Berth</b></td>
+          <td>0.0 tonnes</td>
+          <td>${fmtNum(b.berth_fuel_saved)} tonnes</td>
+          <td><b style="color:var(--teal);">+${fmtNum(b.berth_fuel_saved)} tonnes displaced</b></td>
+          <td><span class="status-badge status-pass">Cold Ironing Active</span></td>
+        </tr>
+        <tr>
+          <td><b>Port Grid Electricity Consumed</b></td>
+          <td>0.0 MWh</td>
+          <td>${fmtNum(b.berth_electricity_mwh)} MWh</td>
+          <td>+${fmtNum(b.berth_electricity_mwh)} MWh</td>
+          <td><span class="status-badge status-navy">Municipal Grid</span></td>
+        </tr>
+        <tr>
+          <td><b>UseShorePower[port,vessel] Decision</b></td>
+          <td>Forced to 0 (Disabled)</td>
+          <td>Optimized ∈ {0,1} at OPS ports</td>
+          <td>Active where supported & compatible</td>
+          <td><span class="status-badge status-pass">Feasibility Constrained</span></td>
+        </tr>
+      `;
+    }
+
+    if (loading) loading.style.display = 'none';
+    if (container) {
+      container.style.display = 'block';
+      setTimeout(() => {
+        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    }
+  } catch (err) {
+    console.error('Plan comparison failed:', err);
+    if (loading) loading.innerHTML = '<span style="color:#b91c1c;">Failed to run comparison. Check server log.</span>';
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '▶ Run Plan A vs Plan B Optimization Benchmark';
+    }
+  }
+}
+
+function renderShorePowerTerminalTable(ports, pBreakdown) {
+  const tbody = document.querySelector('#table-shore tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  
+  const breakdownMap = {};
+  if (Array.isArray(pBreakdown)) {
+    pBreakdown.forEach(row => {
+      breakdownMap[row.port_id] = row;
+    });
+  }
+
+  Object.entries(ports).forEach(([pid, pinfo]) => {
+    const tr = document.createElement('tr');
+    const hasSP = pinfo.has_shore_power;
+    const bInfo = breakdownMap[pid] || {};
+    const co2Displaced = bInfo.co2_avoided_tonnes != null ? `${bInfo.co2_avoided_tonnes.toLocaleString()} t` : (hasSP ? '1,420 t' : '0 t');
+    const costSavings = bInfo.cost_savings_usd != null ? (bInfo.cost_savings_usd >= 0 ? `-$${Math.round(bInfo.cost_savings_usd).toLocaleString()}` : `+$${Math.round(Math.abs(bInfo.cost_savings_usd)).toLocaleString()}`) : (hasSP ? '-$35,000' : '$0');
+
+    tr.innerHTML = `
+      <td><b>${pinfo.name}</b></td>
+      <td><span class="status-badge ${hasSP ? 'status-pass' : 'status-fail'}">${hasSP ? 'HVSC READY' : 'UNAVAILABLE'}</span></td>
+      <td>${pinfo.grid_ef_tonnes_per_mwh || 0.65}</td>
+      <td>$${pinfo.electricity_price_usd_per_mwh || 120}</td>
+      <td>${co2Displaced}</td>
+      <td>${costSavings}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const chartEl = document.getElementById('chart-shore-emiss');
+  if (chartEl && window.Plotly) {
+    Plotly.newPlot(chartEl, [{
       x: Object.values(ports).map(p => p.name.split('(')[0]),
       y: Object.values(ports).map(p => p.has_shore_power ? 1420 : 0),
       type: 'bar',
-      marker: { color: '#0d9488' }
+      marker: { color: Object.values(ports).map(p => p.has_shore_power ? '#0d9488' : '#94a3b8') },
+      text: Object.values(ports).map(p => p.has_shore_power ? '1,420 t avoided' : 'No HVSC'),
+      textposition: 'auto'
     }], {
       margin: { t: 20, r: 20, l: 50, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
@@ -3740,9 +4268,6 @@ async function loadShorePower() {
       font: { family: 'Inter, sans-serif' },
       yaxis: { title: 'Displaced Auxiliary Emissions (t CO2e/yr)', gridcolor: '#f1f5f9' }
     }, { responsive: true, displayModeBar: false });
-
-  } catch (err) {
-    console.error('Error loading shore power:', err);
   }
 }
 
@@ -4147,6 +4672,9 @@ document.querySelectorAll('.tab-container').forEach(container => {
 
 // Initial Load
 fetchPlannerData();
+
+// Initialize Shore Power upfront so event listeners are permanently attached immediately
+loadShorePower();
 
 // Defer non-critical network background loading until after primary view is interactive
 if ('requestIdleCallback' in window) {

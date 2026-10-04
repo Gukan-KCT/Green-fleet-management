@@ -101,9 +101,10 @@ async function fetchPlannerData(forceRecompute = false) {
   const w_c = parseFloat(rangeCost.value) / 100;
   const w_e = parseFloat(rangeEmiss.value) / 100;
   const speed = parseFloat(inputSpeed.value);
+  const allowShorePower = document.getElementById('check-allow-shore-power')?.checked ?? true;
 
   try {
-    const res = await fetch(`/api/plan?w_fuel=${w_f}&w_cost=${w_c}&w_emiss=${w_e}&speed_cap=${speed}&force_recompute=${forceRecompute}`);
+    const res = await fetch(`/api/plan?w_fuel=${w_f}&w_cost=${w_c}&w_emiss=${w_e}&speed_cap=${speed}&shore_power=${allowShorePower}&force_recompute=${forceRecompute}`);
     const data = await res.json();
     renderPlanner(data);
   } catch (err) {
@@ -1329,34 +1330,342 @@ async function loadFuels() {
 }
 
 // ================= 4. SHORE POWER LOGIC =================
+let shorePowerInitialized = false;
+
 async function loadShorePower() {
   try {
     const res = await fetch('/api/shore-power');
     const d = await res.json();
     const ports = d.ports || {};
-    const pBreakdown = d.data?.port_breakdown || [];
+    const tradeoff = d.tradeoff_calculator;
 
-    const tbody = document.querySelector('#table-shore tbody');
-    tbody.innerHTML = '';
-    Object.entries(ports).forEach(([pid, pinfo]) => {
-      const tr = document.createElement('tr');
-      const hasSP = pinfo.has_shore_power;
-      tr.innerHTML = `
-        <td><b>${pinfo.name}</b></td>
-        <td><span class="status-badge ${hasSP ? 'status-pass' : 'status-fail'}">${hasSP ? 'READY' : 'UNAVAILABLE'}</span></td>
-        <td>${pinfo.grid_ef_tonnes_per_mwh || 0.65}</td>
-        <td>$${pinfo.electricity_price_usd_per_mwh || 120}</td>
-        <td>${hasSP ? '1,420 t' : '0 t'}</td>
-        <td>${hasSP ? '-$35,000' : '$0'}</td>
-      `;
-      tbody.appendChild(tr);
+    renderShorePowerTerminalTable(ports, d.data?.port_breakdown);
+    if (tradeoff) {
+      renderSinglePortOpsResult(tradeoff);
+    }
+
+    if (!shorePowerInitialized) {
+      initShorePowerEventListeners(ports);
+      shorePowerInitialized = true;
+    }
+  } catch (err) {
+    console.error('Error loading shore power:', err);
+  }
+}
+
+function initShorePowerEventListeners(ports) {
+  const portSelect = document.getElementById('ops-port');
+  const vesselSelect = document.getElementById('ops-vessel');
+  const berthHoursInput = document.getElementById('ops-berth-hours');
+  const overrideSelect = document.getElementById('ops-available-override');
+  const auxKwInput = document.getElementById('ops-aux-kw');
+  const tariffInput = document.getElementById('ops-tariff');
+  const effRange = document.getElementById('ops-eff');
+  const effVal = document.getElementById('val-ops-eff');
+  const calcBtn = document.getElementById('btn-calc-ops');
+  const planCompBtn = document.getElementById('btn-run-plan-comparison');
+
+  // Update efficiency label on slider move
+  if (effRange && effVal) {
+    effRange.addEventListener('input', () => {
+      effVal.textContent = `${effRange.value}%`;
     });
+  }
 
-    Plotly.newPlot('chart-shore-emiss', [{
+  // Auto-sync port defaults when port changes
+  if (portSelect) {
+    portSelect.addEventListener('change', () => {
+      const pId = portSelect.value;
+      const pInfo = ports[pId];
+      if (pInfo) {
+        if (pInfo.berth_hours_avg) berthHoursInput.value = pInfo.berth_hours_avg;
+        if (pInfo.electricity_price_usd_per_mwh) tariffInput.value = pInfo.electricity_price_usd_per_mwh;
+      }
+      runSinglePortOpsCalculation();
+    });
+  }
+
+  // Auto-sync vessel auxiliary load when vessel changes
+  if (vesselSelect) {
+    vesselSelect.addEventListener('change', () => {
+      const auxMap = {
+        small_feeder: 400,
+        handymax_feeder: 650,
+        sub_panamax_feeder: 900,
+        panamax_feeder: 1200
+      };
+      if (auxMap[vesselSelect.value]) {
+        auxKwInput.value = auxMap[vesselSelect.value];
+      }
+      runSinglePortOpsCalculation();
+    });
+  }
+
+  if (calcBtn) {
+    calcBtn.addEventListener('click', runSinglePortOpsCalculation);
+  }
+
+  if (planCompBtn) {
+    planCompBtn.addEventListener('click', runPlanComparisonOptimization);
+  }
+}
+
+async function runSinglePortOpsCalculation() {
+  const port = document.getElementById('ops-port')?.value || 'mumbai';
+  const vessel = document.getElementById('ops-vessel')?.value || 'handymax_feeder';
+  const berthHours = parseFloat(document.getElementById('ops-berth-hours')?.value || 24);
+  const override = document.getElementById('ops-available-override')?.value || 'auto';
+  const auxKw = parseFloat(document.getElementById('ops-aux-kw')?.value || 650);
+  const tariff = parseFloat(document.getElementById('ops-tariff')?.value || 120);
+  const eff = parseFloat(document.getElementById('ops-eff')?.value || 95) / 100;
+
+  let spAvailParam = '';
+  if (override === 'yes') spAvailParam = '&shore_power_available=true';
+  if (override === 'no') spAvailParam = '&shore_power_available=false';
+
+  const btn = document.getElementById('btn-calc-ops');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Calculating...';
+  }
+
+  try {
+    const url = `/api/shore-power?port=${port}&vessel=${vessel}&berth_hours=${berthHours}&electricity_price=${tariff}&aux_power_kw=${auxKw}&efficiency=${eff}${spAvailParam}`;
+    const res = await fetch(url);
+    const d = await res.json();
+    if (d.tradeoff_calculator) {
+      renderSinglePortOpsResult(d.tradeoff_calculator);
+      if (btn) {
+        btn.textContent = '✓ Updated Just Now!';
+        btn.style.background = '#059669';
+        setTimeout(() => {
+          btn.textContent = '⚡ Recalculate Berth Tradeoff';
+          btn.style.background = 'var(--teal)';
+        }, 1200);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to calculate OPS tradeoff:', err);
+    if (btn) {
+      btn.textContent = '⚠️ Error Calculating';
+      btn.style.background = '#dc2626';
+      setTimeout(() => {
+        btn.textContent = '⚡ Recalculate Berth Tradeoff';
+        btn.style.background = 'var(--teal)';
+      }, 1500);
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+    }
+  }
+}
+
+function renderSinglePortOpsResult(t) {
+  const withoutOps = t.without_ops || {};
+  const withOps = t.with_ops || {};
+  const tradeoff = t.tradeoff || {};
+
+  // 1. WITHOUT OPS Card
+  document.getElementById('ops-res-no-fuel').textContent = `${(withoutOps.fuel_consumption_tonnes || 0).toFixed(3)} t MGO`;
+  document.getElementById('ops-res-no-cost').textContent = fmtCurr(withoutOps.fuel_cost_usd || 0);
+  document.getElementById('ops-res-no-co2').textContent = `${(withoutOps.co2e_tonnes || 0).toFixed(2)} t CO2e`;
+
+  // 2. WITH OPS Card
+  const withBadge = document.getElementById('ops-res-with-badge');
+  if (t.ops_feasible) {
+    withBadge.textContent = 'Cold Ironing Active';
+    withBadge.className = 'status-badge status-pass';
+    document.getElementById('ops-res-with-elec').textContent = `${(withOps.electricity_consumption_mwh || 0).toFixed(2)} MWh (${Math.round(withOps.electricity_consumption_kwh || 0).toLocaleString()} kWh)`;
+    document.getElementById('ops-res-with-cost').textContent = fmtCurr(withOps.electricity_cost_usd || 0);
+    document.getElementById('ops-res-with-co2').textContent = `${(withOps.co2e_tonnes || 0).toFixed(2)} t CO2e`;
+  } else {
+    withBadge.textContent = 'Connection Rejected';
+    withBadge.className = 'status-badge status-fail';
+    document.getElementById('ops-res-with-elec').textContent = '0.00 MWh (Infeasible)';
+    document.getElementById('ops-res-with-cost').textContent = '$0 (Generator fallback)';
+    document.getElementById('ops-res-with-co2').textContent = 'N/A (Generator required)';
+  }
+
+  // 3. NET TRADEOFF Card
+  const deltaBadge = document.getElementById('ops-res-delta-badge');
+  if (t.ops_feasible) {
+    deltaBadge.textContent = 'Achieved';
+    deltaBadge.className = 'status-badge status-pass';
+    document.getElementById('ops-res-delta-fuel').textContent = `+${(tradeoff.fuel_saved_tonnes || 0).toFixed(3)} t MGO`;
+    
+    const costDiff = tradeoff.cost_difference_usd || 0;
+    const costEl = document.getElementById('ops-res-delta-cost');
+    if (costDiff >= 0) {
+      costEl.textContent = `+$${Math.round(costDiff).toLocaleString()} (Net Savings)`;
+      costEl.style.color = '#047857';
+    } else {
+      costEl.textContent = `-$${Math.round(Math.abs(costDiff)).toLocaleString()} (Electricity Premium)`;
+      costEl.style.color = '#b45309';
+    }
+
+    document.getElementById('ops-res-delta-co2').textContent = `${(tradeoff.co2e_avoided_tonnes || 0).toFixed(2)} t CO2e avoided`;
+    document.getElementById('ops-res-delta-pct').textContent = `-${(tradeoff.percentage_reduction || 0).toFixed(1)}% Emissions`;
+  } else {
+    deltaBadge.textContent = 'Zero Benefit';
+    deltaBadge.className = 'status-badge status-fail';
+    document.getElementById('ops-res-delta-fuel').textContent = '0.00 t';
+    document.getElementById('ops-res-delta-cost').textContent = '$0';
+    document.getElementById('ops-res-delta-co2').textContent = '0.00 t';
+    document.getElementById('ops-res-delta-pct').textContent = '0.0%';
+  }
+
+  // Rejection Banner
+  const banner = document.getElementById('ops-rejection-banner');
+  if (banner) {
+    if (!t.ops_feasible) {
+      banner.style.display = 'block';
+      banner.style.background = '#fef2f2';
+      banner.style.border = '1px solid #f87171';
+      banner.style.color = '#991b1b';
+      banner.innerHTML = `⚠️ <b>OPS Connection Infeasible / Rejected</b>: ${t.rejection_reason || 'Terminal lacks shore power infrastructure.'} Auxiliary generator burning MGO will operate during the entire berthing window.`;
+    } else {
+      banner.style.display = 'block';
+      banner.style.background = '#f0fdf4';
+      banner.style.border = '1px solid #86efac';
+      banner.style.color = '#166534';
+      banner.innerHTML = `✅ <b>OPS Available & Connected</b>: Port ${t.port_name} supports High-Voltage Shore Connection (HVSC). Auxiliary generator is shut down, eliminating hoteling fuel burn and cutting port emissions by <b>${(tradeoff.percentage_reduction || 0).toFixed(1)}%</b>.`;
+    }
+  }
+}
+
+async function runPlanComparisonOptimization() {
+  const btn = document.getElementById('btn-run-plan-comparison');
+  const loading = document.getElementById('plan-comp-loading');
+  const container = document.getElementById('plan-comp-container');
+  const tbody = document.getElementById('tbody-plan-comparison');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Running Multi-Objective Optimization...';
+  }
+  if (loading) {
+    loading.style.display = 'block';
+    loading.innerHTML = '<span class="spinner" style="vertical-align:middle;margin-right:8px;"></span> Computing Plan A vs Plan B optimization tradeoff on classical CPU...';
+  }
+  if (container) container.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/shore-power?compare_plans=true');
+    const d = await res.json();
+    const comp = d.plan_comparison;
+
+    if (!comp || comp.error) {
+      if (loading) loading.innerHTML = `<span style="color:#b91c1c;">Optimization comparison failed: ${comp?.error || 'Unknown error'}</span>`;
+      return;
+    }
+
+    const a = comp.plan_a_no_ops || {};
+    const b = comp.plan_b_with_ops || {};
+    const deltas = comp.deltas || {};
+
+    tbody.innerHTML = `
+      <tr>
+        <td><b>Total Bunker & Auxiliary Fuel</b></td>
+        <td>${fmtNum(a.fuel_tonnes)} tonnes</td>
+        <td>${fmtNum(b.fuel_tonnes)} tonnes</td>
+        <td><b style="color:var(--teal);">-${fmtNum(deltas.fuel_saved_tonnes)} tonnes</b></td>
+        <td><span class="status-badge status-pass">Reduced MGO Burn</span></td>
+      </tr>
+      <tr>
+        <td><b>Annual Operating Cost</b></td>
+        <td>${fmtCurr(a.operating_cost_usd)}</td>
+        <td>${fmtCurr(b.operating_cost_usd)}</td>
+        <td><b>${deltas.cost_diff_usd >= 0 ? '-' : '+'}${fmtCurr(Math.abs(deltas.cost_diff_usd))}</b></td>
+        <td><span class="status-badge ${deltas.cost_diff_usd >= 0 ? 'status-pass' : 'status-amber'}">${deltas.cost_diff_usd >= 0 ? 'Net Cost Savings' : 'Electricity Tariff Tradeoff'}</span></td>
+      </tr>
+      <tr>
+        <td><b>Lifecycle GHG Emissions (WtW)</b></td>
+        <td>${fmtNum(a.lifecycle_co2e_tonnes)} t CO2e</td>
+        <td>${fmtNum(b.lifecycle_co2e_tonnes)} t CO2e</td>
+        <td><b style="color:var(--teal);">-${fmtNum(deltas.co2e_avoided_tonnes)} t CO2e (-${deltas.co2e_reduction_pct}%)</b></td>
+        <td><span class="status-badge status-pass">Decarbonized Berthing</span></td>
+      </tr>
+      <tr>
+        <td><b>Displaced Auxiliary MGO at Berth</b></td>
+        <td>0.0 tonnes</td>
+        <td>${fmtNum(b.berth_fuel_saved)} tonnes</td>
+        <td><b style="color:var(--teal);">+${fmtNum(b.berth_fuel_saved)} tonnes displaced</b></td>
+        <td><span class="status-badge status-pass">Cold Ironing Active</span></td>
+      </tr>
+      <tr>
+        <td><b>Port Grid Electricity Consumed</b></td>
+        <td>0.0 MWh</td>
+        <td>${fmtNum(b.berth_electricity_mwh)} MWh</td>
+        <td>+${fmtNum(b.berth_electricity_mwh)} MWh</td>
+        <td><span class="status-badge status-navy">Municipal Grid</span></td>
+      </tr>
+      <tr>
+        <td><b>UseShorePower[port,vessel] Decision</b></td>
+        <td>Forced to 0 (Disabled)</td>
+        <td>Optimized ∈ {0,1} at OPS ports</td>
+        <td>Active where supported & compatible</td>
+        <td><span class="status-badge status-pass">Feasibility Constrained</span></td>
+      </tr>
+    `;
+
+    if (loading) loading.style.display = 'none';
+    if (container) {
+      container.style.display = 'block';
+      setTimeout(() => {
+        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    }
+  } catch (err) {
+    console.error('Plan comparison failed:', err);
+    if (loading) loading.innerHTML = '<span style="color:#b91c1c;">Failed to run comparison. Check server log.</span>';
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '▶ Run Plan A vs Plan B Optimization Benchmark';
+    }
+  }
+}
+
+function renderShorePowerTerminalTable(ports, pBreakdown) {
+  const tbody = document.querySelector('#table-shore tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  
+  const breakdownMap = {};
+  if (Array.isArray(pBreakdown)) {
+    pBreakdown.forEach(row => {
+      breakdownMap[row.port_id] = row;
+    });
+  }
+
+  Object.entries(ports).forEach(([pid, pinfo]) => {
+    const tr = document.createElement('tr');
+    const hasSP = pinfo.has_shore_power;
+    const bInfo = breakdownMap[pid] || {};
+    const co2Displaced = bInfo.co2_avoided_tonnes != null ? `${bInfo.co2_avoided_tonnes.toLocaleString()} t` : (hasSP ? '1,420 t' : '0 t');
+    const costSavings = bInfo.cost_savings_usd != null ? (bInfo.cost_savings_usd >= 0 ? `-$${Math.round(bInfo.cost_savings_usd).toLocaleString()}` : `+$${Math.round(Math.abs(bInfo.cost_savings_usd)).toLocaleString()}`) : (hasSP ? '-$35,000' : '$0');
+
+    tr.innerHTML = `
+      <td><b>${pinfo.name}</b></td>
+      <td><span class="status-badge ${hasSP ? 'status-pass' : 'status-fail'}">${hasSP ? 'HVSC READY' : 'UNAVAILABLE'}</span></td>
+      <td>${pinfo.grid_ef_tonnes_per_mwh || 0.65}</td>
+      <td>$${pinfo.electricity_price_usd_per_mwh || 120}</td>
+      <td>${co2Displaced}</td>
+      <td>${costSavings}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const chartEl = document.getElementById('chart-shore-emiss');
+  if (chartEl && window.Plotly) {
+    Plotly.newPlot(chartEl, [{
       x: Object.values(ports).map(p => p.name.split('(')[0]),
       y: Object.values(ports).map(p => p.has_shore_power ? 1420 : 0),
       type: 'bar',
-      marker: { color: '#0d9488' }
+      marker: { color: Object.values(ports).map(p => p.has_shore_power ? '#0d9488' : '#94a3b8') },
+      text: Object.values(ports).map(p => p.has_shore_power ? '1,420 t avoided' : 'No HVSC'),
+      textposition: 'auto'
     }], {
       margin: { t: 20, r: 20, l: 50, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
@@ -1364,9 +1673,6 @@ async function loadShorePower() {
       font: { family: 'Inter, sans-serif' },
       yaxis: { title: 'Displaced Auxiliary Emissions (t CO2e/yr)', gridcolor: '#f1f5f9' }
     }, { responsive: true, displayModeBar: false });
-
-  } catch (err) {
-    console.error('Error loading shore power:', err);
   }
 }
 

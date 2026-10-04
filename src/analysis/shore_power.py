@@ -14,6 +14,167 @@ import pandas as pd
 from src.models.physics import load_config, calculate_berth_energy_and_emissions
 
 
+def calculate_ops_tradeoff(
+    port_id: str,
+    vessel_type: str = "handymax_feeder",
+    berth_hours: Optional[float] = None,
+    shore_power_available: Optional[bool] = None,
+    electricity_price_usd_per_mwh: Optional[float] = None,
+    aux_power_demand_kw: Optional[float] = None,
+    connection_efficiency: float = 0.95,
+    min_berth_hours: float = 2.0,
+    vessel_ops_compatible: bool = True,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Calculate single-port arrival and berthing Shore Power / Onshore Power Supply (OPS) tradeoff.
+
+    Models:
+    Vessel arrives at port
+    -> Berthing duration
+    -> Hotel/auxiliary energy demand
+    -> Shore power availability
+    -> Electricity consumption
+    -> Shore power cost
+    -> Avoided auxiliary engine fuel (MGO)
+    -> Avoided emissions (WTW CO2e)
+
+    Inputs:
+    - Port: port_id
+    - Berthing hours: berth_hours (defaults to port_cfg.berth_hours_avg)
+    - Shore power available?: yes/no (defaults to port_cfg.has_shore_power)
+    - Electricity price: electricity_price_usd_per_mwh ($/MWh, defaults to port_cfg)
+    - Auxiliary power demand: aux_power_demand_kw (defaults to vessel_types[vessel].aux_kw_berth)
+    - Shore power connection efficiency: eta (default: 0.95)
+
+    Calculates:
+    WITHOUT OPS:
+      - Fuel consumption (tonnes MGO)
+      - Fuel cost ($)
+      - CO2e emissions (tonnes)
+    WITH OPS:
+      - Electricity consumption (kWh & MWh)
+      - Electricity cost ($)
+      - CO2e emissions (tonnes)
+    DELTAS:
+      - Fuel Saved
+      - Cost Difference ($ saved)
+      - CO2e Avoided
+      - Percentage Reduction (%)
+    """
+    cfg = config or load_config()
+    ports_cfg = cfg.get("ports", {})
+    vessels_cfg = cfg.get("vessel_types", {})
+
+    p_cfg = dict(ports_cfg.get(port_id, {}))
+    if not p_cfg:
+        # Fallback port configuration if custom/unlisted
+        p_cfg = {
+            "name": port_id.title(),
+            "has_shore_power": True,
+            "grid_ef_tonnes_per_mwh": 0.65,
+            "electricity_price_usd_per_mwh": 120.0,
+            "berth_hours_avg": 24.0,
+        }
+
+    # Override port attributes if explicitly provided by user
+    if shore_power_available is not None:
+        p_cfg["has_shore_power"] = bool(shore_power_available)
+    if electricity_price_usd_per_mwh is not None:
+        p_cfg["electricity_price_usd_per_mwh"] = float(electricity_price_usd_per_mwh)
+
+    v_cfg = vessels_cfg.get(vessel_type, {})
+    aux_kw = (
+        float(aux_power_demand_kw)
+        if aux_power_demand_kw is not None
+        else float(v_cfg.get("aux_kw_berth", 650.0))
+    )
+    b_hours = (
+        float(berth_hours)
+        if berth_hours is not None
+        else float(p_cfg.get("berth_hours_avg", 24.0))
+    )
+
+    berth_calc = calculate_berth_energy_and_emissions(
+        aux_kw=aux_kw,
+        berth_hours=b_hours,
+        use_shore_power=True,  # Test shore power capability
+        port_cfg=p_cfg,
+        config=cfg,
+        connection_efficiency=connection_efficiency,
+        min_berth_hours=min_berth_hours,
+        vessel_ops_compatible=vessel_ops_compatible,
+    )
+
+    without_ops = berth_calc["without_ops"]
+    with_ops = berth_calc["with_ops"]
+
+    # If port has no shore power or vessel is incompatible or berth is too short:
+    # Feasibility flag clearly communicates applicability
+    ops_feasible = berth_calc["ops_feasible"]
+
+    fuel_saved = without_ops["fuel_tonnes"] if ops_feasible else 0.0
+    cost_diff = (without_ops["cost_usd"] - with_ops["electricity_cost_usd"]) if ops_feasible else 0.0
+    co2e_avoided = (without_ops["emissions_co2e"] - with_ops["emissions_co2e"]) if ops_feasible else 0.0
+    pct_reduction = (
+        (co2e_avoided / max(1e-4, without_ops["emissions_co2e"])) * 100.0
+        if ops_feasible
+        else 0.0
+    )
+
+    return {
+        "port_id": port_id,
+        "port_name": p_cfg.get("name", port_id),
+        "vessel_type": vessel_type,
+        "vessel_name": v_cfg.get("name", vessel_type),
+        "berthing_hours": b_hours,
+        "aux_power_demand_kw": aux_kw,
+        "hotel_energy_kwh": berth_calc["kwh_required"],
+        "hotel_energy_mwh": berth_calc["mwh_required"],
+        "shore_power_available": bool(p_cfg.get("has_shore_power", False)),
+        "vessel_ops_compatible": vessel_ops_compatible,
+        "berth_long_enough": berth_calc["berth_long_enough"],
+        "ops_feasible": ops_feasible,
+        "connection_efficiency": connection_efficiency,
+        "grid_ef_tonnes_per_mwh": float(p_cfg.get("grid_ef_tonnes_per_mwh", 0.65)),
+        "electricity_price_usd_per_mwh": float(p_cfg.get("electricity_price_usd_per_mwh", 120.0)),
+        # WITHOUT OPS
+        "without_ops": {
+            "fuel_consumption_tonnes": round(without_ops["fuel_tonnes"], 4),
+            "fuel_cost_usd": round(without_ops["cost_usd"], 2),
+            "co2e_tonnes": round(without_ops["emissions_co2e"], 4),
+        },
+        # WITH OPS
+        "with_ops": {
+            "electricity_consumption_kwh": round(with_ops["electricity_kwh"], 2),
+            "electricity_consumption_mwh": round(with_ops["electricity_mwh"], 4),
+            "electricity_cost_usd": round(with_ops["electricity_cost_usd"], 2),
+            "co2e_tonnes": round(with_ops["emissions_co2e"], 4),
+            "feasible": ops_feasible,
+        },
+        # DELTAS
+        "tradeoff": {
+            "fuel_saved_tonnes": round(fuel_saved, 4),
+            "cost_difference_usd": round(cost_diff, 2),
+            "co2e_avoided_tonnes": round(co2e_avoided, 4),
+            "percentage_reduction": round(pct_reduction, 2),
+        },
+        "rejection_reason": (
+            None
+            if ops_feasible
+            else (
+                "Port terminal lacks high-voltage shore connection (HVSC) substation"
+                if not p_cfg.get("has_shore_power")
+                else (
+                    "Vessel not equipped with cold-ironing transformer/switchgear"
+                    if not vessel_ops_compatible
+                    else f"Berthing duration ({b_hours}h) is below minimum safe connection threshold ({min_berth_hours}h)"
+                )
+            )
+        ),
+    }
+
+
 def analyze_shore_power_fleet(
     eval_result: Dict[str, Any],
     config: Optional[Dict[str, Any]] = None,

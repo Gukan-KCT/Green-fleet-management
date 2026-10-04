@@ -543,49 +543,140 @@ def calculate_berth_energy_and_emissions(
     use_shore_power: bool,
     port_cfg: Dict[str, Any],
     config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, float]:
+    connection_efficiency: float = 0.95,
+    min_berth_hours: float = 2.0,
+    vessel_ops_compatible: bool = True,
+) -> Dict[str, Any]:
     """
-    Calculate port berth auxiliary energy consumption, cost, and emissions.
-    If shore power is used and available:
-      Uses port electric grid (kWh), with local grid emission factor and electricity tariff.
-    Without shore power (or if unavailable):
-      Runs onboard auxiliary generator burning MGO.
-      Auxiliary engine specific fuel consumption (SFOC) ~ 210 g MGO / kWh = 0.000210 t / kWh.
+    Calculate port berth auxiliary energy consumption, cost, and emissions under both
+    Onboard Auxiliary Generator (WITHOUT OPS) and Shore Power / Cold Ironing (WITH OPS).
+
+    Formulation:
+    1. Auxiliary hoteling energy demand:
+       E_aux = aux_kw * berth_hours (kWh) = E_aux / 1000 (MWh)
+    2. Feasibility of Shore Power connection:
+       ops_feasible = port_cfg.has_shore_power AND vessel_ops_compatible AND (berth_hours >= min_berth_hours)
+       ops_active = use_shore_power AND ops_feasible
+    3. WITHOUT OPS (Conventional onboard auxiliary generator burning MGO):
+       - Fuel consumption: F_mgo = E_aux * SFOC_mgo (SFOC = 210 g/kWh = 0.000210 t/kWh)
+       - Fuel cost: Cost_mgo = F_mgo * Price_mgo
+       - Emissions: CO2e_mgo = F_mgo * EF_mgo (Well-to-Wake: TtW 3.206 + WtT 0.65 = 3.856 t CO2e/t)
+    4. WITH OPS (When active):
+       - Electricity required from port grid: E_grid = E_aux / connection_efficiency (kWh)
+       - Electricity cost: Cost_grid = (E_grid / 1000) * Tariff_port ($/MWh)
+       - Emissions: CO2e_grid = (E_grid / 1000) * Grid_EF_port (t CO2e/MWh)
+       - Avoided fuel: Fuel_saved = F_mgo
+       - Cost diff: Cost_mgo - Cost_grid
+       - CO2e avoided: CO2e_mgo - CO2e_grid
     """
     if config is None:
         config = load_config()
 
-    kwh_required = aux_kw * berth_hours
-    mwh_required = kwh_required / 1000.0
+    kwh_aux = aux_kw * berth_hours
+    mwh_aux = kwh_aux / 1000.0
 
+    # 1. Baseline calculation: WITHOUT OPS (running auxiliary generator burning MGO)
+    sfoc_tonnes_per_kwh = 0.000210  # 210 g/kWh typical 4-stroke auxiliary diesel engine
+    mgo_fuel_tonnes_baseline = kwh_aux * sfoc_tonnes_per_kwh
+    mgo_price = get_fuel_price_usd_per_tonne("MGO", config=config)
+    cost_baseline_usd = mgo_fuel_tonnes_baseline * mgo_price
+    mgo_emissions = calculate_emissions(mgo_fuel_tonnes_baseline, "MGO", config=config)
+    emissions_baseline_co2e = mgo_emissions["total_co2e"]
+
+    # 2. Port and vessel OPS capabilities
     port_has_sp = bool(port_cfg.get("has_shore_power", False))
+    berth_long_enough = berth_hours >= min_berth_hours
+    ops_feasible = port_has_sp and vessel_ops_compatible and berth_long_enough
 
-    if use_shore_power and port_has_sp:
-        # Powered by shore grid
-        grid_ef = float(port_cfg.get("grid_ef_tonnes_per_mwh", 0.65))
-        elec_tariff = float(port_cfg.get("electricity_price_usd_per_mwh", 120.0))
+    # 3. WITH OPS calculation (if OPS is available at this port/vessel)
+    eff = max(0.50, min(1.0, float(connection_efficiency if connection_efficiency is not None else 0.95)))
+    kwh_grid = kwh_aux / eff
+    mwh_grid = kwh_grid / 1000.0
 
-        cost_usd = mwh_required * elec_tariff
-        emissions_co2e = mwh_required * grid_ef
+    grid_ef = float(port_cfg.get("grid_ef_tonnes_per_mwh", 0.65))
+    elec_tariff = float(port_cfg.get("electricity_price_usd_per_mwh", 120.0))
+
+    cost_with_ops_usd = mwh_grid * elec_tariff
+    emissions_with_ops_co2e = mwh_grid * grid_ef
+
+    # 4. Actual operation given use_shore_power decision
+    ops_active = bool(use_shore_power and ops_feasible)
+
+    if ops_active:
+        kwh_consumed = kwh_grid
+        mwh_consumed = mwh_grid
         fuel_tonnes = 0.0
+        cost_usd = cost_with_ops_usd
+        emissions_co2e = emissions_with_ops_co2e
         power_source = "shore_grid"
     else:
-        # Powered by onboard auxiliary generator using MGO
-        sfoc_tonnes_per_kwh = 0.000210  # 210 g/kWh typical 4-stroke auxiliary gen
-        fuel_tonnes = kwh_required * sfoc_tonnes_per_kwh
-
-        mgo_price = get_fuel_price_usd_per_tonne("MGO", config=config)
-        cost_usd = fuel_tonnes * mgo_price
-
-        mgo_emissions = calculate_emissions(fuel_tonnes, "MGO", config=config)
-        emissions_co2e = mgo_emissions["total_co2e"]
+        kwh_consumed = kwh_aux
+        mwh_consumed = mwh_aux
+        fuel_tonnes = mgo_fuel_tonnes_baseline
+        cost_usd = cost_baseline_usd
+        emissions_co2e = emissions_baseline_co2e
         power_source = "onboard_aux_gen"
 
+    # 5. Comparative Tradeoff Metrics (Realized when ops_active, potential in tradeoff)
+    realized_fuel_saved = mgo_fuel_tonnes_baseline if ops_active else 0.0
+    realized_cost_diff = (cost_baseline_usd - cost_with_ops_usd) if ops_active else 0.0
+    realized_co2e_avoided = (emissions_baseline_co2e - emissions_with_ops_co2e) if ops_active else 0.0
+    realized_pct_reduction = (
+        (realized_co2e_avoided / max(1e-4, emissions_baseline_co2e)) * 100.0
+        if ops_active
+        else 0.0
+    )
+
+    potential_fuel_saved = mgo_fuel_tonnes_baseline if ops_feasible else 0.0
+    potential_cost_diff = (cost_baseline_usd - cost_with_ops_usd) if ops_feasible else 0.0
+    potential_co2e_avoided = (emissions_baseline_co2e - emissions_with_ops_co2e) if ops_feasible else 0.0
+    potential_pct_reduction = (
+        (potential_co2e_avoided / max(1e-4, emissions_baseline_co2e)) * 100.0
+        if ops_feasible
+        else 0.0
+    )
+
     return {
-        "kwh_required": kwh_required,
-        "mwh_required": mwh_required,
+        "kwh_required": kwh_aux,
+        "mwh_required": mwh_aux,
+        "kwh_consumed": kwh_consumed,
+        "mwh_consumed": mwh_consumed,
         "fuel_tonnes": fuel_tonnes,
         "cost_usd": cost_usd,
         "emissions_co2e": emissions_co2e,
         "power_source": power_source,
+        "ops_feasible": ops_feasible,
+        "ops_active": ops_active,
+        "port_has_shore_power": port_has_sp,
+        "vessel_ops_compatible": vessel_ops_compatible,
+        "berth_long_enough": berth_long_enough,
+        "connection_efficiency": eff,
+        # Explicit breakdown for WITH and WITHOUT OPS
+        "without_ops": {
+            "fuel_tonnes": mgo_fuel_tonnes_baseline,
+            "cost_usd": cost_baseline_usd,
+            "emissions_co2e": emissions_baseline_co2e,
+            "kwh": kwh_aux,
+        },
+        "with_ops": {
+            "electricity_kwh": kwh_grid,
+            "electricity_mwh": mwh_grid,
+            "electricity_cost_usd": cost_with_ops_usd,
+            "emissions_co2e": emissions_with_ops_co2e,
+            "fuel_tonnes": 0.0,
+            "feasible": ops_feasible,
+        },
+        # Realized Tradeoffs / Deltas for this specific schedule
+        "fuel_saved_tonnes": realized_fuel_saved,
+        "cost_difference_usd": realized_cost_diff,
+        "co2e_avoided_tonnes": realized_co2e_avoided,
+        "percentage_reduction": realized_pct_reduction,
+        # Potential Tradeoff (if OPS were utilized)
+        "potential_tradeoff": {
+            "fuel_saved_tonnes": potential_fuel_saved,
+            "cost_difference_usd": potential_cost_diff,
+            "co2e_avoided_tonnes": potential_co2e_avoided,
+            "percentage_reduction": potential_pct_reduction,
+        },
     }
+
