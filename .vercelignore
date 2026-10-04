@@ -9,4 +9,3 @@ tests/
 docs/
 scratch/
 *.zip
-data/*.pkl

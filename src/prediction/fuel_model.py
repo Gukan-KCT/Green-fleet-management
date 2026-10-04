@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from src.models.physics import calculate_leg_fuel_conventional, load_config
-from src.prediction.evaluator import evaluate_prediction_models
+
 
 
 class FuelModel:

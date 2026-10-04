@@ -241,9 +241,9 @@ def get_plan(
 
     opt_res = optimize_fleet_plan(
         problem=prob,
-        num_qiea_starts=5,
-        evals_per_start=4000,
-        seeds=[42, 43, 44, 45, 46],
+        num_qiea_starts=2,
+        evals_per_start=1000,
+        seeds=[42, 43],
     )
     opt_eval = opt_res["selected_plan"]
     routes = build_routes_df(prob, opt_eval)

@@ -17,7 +17,7 @@ htmlcov/
 
 # Output artifacts & cache
 data/saved_*.json
-data/saved_*.pkl
+# data/saved_*.pkl - tracked for serverless deployment
 .streamlit/
 *.log
 

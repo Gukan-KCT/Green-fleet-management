@@ -93,10 +93,17 @@ async function fetchPlannerData(forceRecompute = false) {
 
   try {
     const res = await fetch(`/api/plan?w_fuel=${w_f}&w_cost=${w_c}&w_emiss=${w_e}&speed_cap=${speed}&force_recompute=${forceRecompute}`);
+    if (!res.ok) {
+      throw new Error(`Planner API returned HTTP ${res.status}: ${res.statusText}`);
+    }
     const data = await res.json();
     renderPlanner(data);
   } catch (err) {
     console.error('Failed to fetch plan:', err);
+    ['delta-fuel', 'delta-cost', 'delta-emiss', 'delta-ci'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = 'Retry Needed';
+    });
   } finally {
     runOptBtn.disabled = false;
     runOptBtn.textContent = '▶ Run Optimization';
