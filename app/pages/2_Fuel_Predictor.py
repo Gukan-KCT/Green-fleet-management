@@ -88,6 +88,16 @@ with col_in:
                 index=fuel_types.index("HFO") if "HFO" in fuel_types else 0,
                 help="Select conventional bunker or green alternative fuel.",
             )
+            if fuel_sel in ["Methanol", "Ammonia", "Hydrogen"]:
+                pathway_sel = st.selectbox(
+                    "Feedstock Pathway",
+                    options=["green", "blue", "grey"],
+                    index=0,
+                    format_func=lambda x: {"green": "Green (Renewable / Biogenic)", "blue": "Blue (Fossil with CCS)", "grey": "Grey (Unabated Fossil)"}[x],
+                    help="Upstream production pathway for alternative fuels.",
+                )
+            else:
+                pathway_sel = "fossil"
         with c_s2:
             dist_in = st.number_input(
                 "Leg Distance (nm)",
@@ -164,10 +174,10 @@ diff_pct = ((ml_fuel_tonnes - phys_fuel_tonnes) / max(0.01, phys_fuel_tonnes)) *
 
 # 3. Emissions and Cost Calculations
 default_tax = float(cfg.get("general", {}).get("carbon_price_usd_per_tonne", 80.0))
-fuel_price = get_fuel_price_usd_per_tonne(fuel_sel, "default", cfg)
+fuel_price = get_fuel_price_usd_per_tonne(fuel_sel, pathway_sel, cfg)
 
-emiss_ml = calculate_emissions(ml_fuel_tonnes, fuel_sel, "default", cfg)
-emiss_phys = calculate_emissions(phys_fuel_tonnes, fuel_sel, "default", cfg)
+emiss_ml = calculate_emissions(ml_fuel_tonnes, fuel_sel, pathway_sel, cfg)
+emiss_phys = calculate_emissions(phys_fuel_tonnes, fuel_sel, pathway_sel, cfg)
 
 cost_ml_fuel = ml_fuel_tonnes * fuel_price
 cost_ml_tax = emiss_ml["total_co2e"] * default_tax
@@ -205,7 +215,7 @@ for m_name, m_inst in trained_models.items():
 with col_pred:
     with st.container(border=True):
         st.markdown("**Voyage Prediction Results**")
-        st.caption(f"Active Model: **{selected_model_name if is_ml_active else 'Physics'}** | Fuel: **{fuel_sel}** | Transit: **{leg_time_days:.1f} days**")
+        st.caption(f"Active Model: **{selected_model_name if is_ml_active else 'Physics'}** | Fuel: **{fuel_sel}** ({pathway_sel}) | Transit: **{leg_time_days:.1f} days**")
 
         kpi_c1, kpi_c2, kpi_c3 = st.columns(3)
         with kpi_c1:
@@ -232,9 +242,9 @@ with col_pred:
         kpi_e1, kpi_e2, kpi_e3 = st.columns(3)
         with kpi_e1:
             st.metric(
-                label="Estimated CO2e",
+                label="Lifecycle CO2e",
                 value=f"{emiss_ml['total_co2e']:.2f} t",
-                help="Lifecycle Well-to-Wake (combustion + upstream fuel supply chain)",
+                help="Lifecycle Well-to-Wake (WtT + TtW + Slip)",
             )
         with kpi_e2:
             st.metric(
@@ -248,6 +258,24 @@ with col_pred:
                 value=f"Grade {ci_rating['grade']}",
                 help=f"{ci_rating['description']} (Simplified proxy, not official IMO CII).",
             )
+
+        # Transparent Hierarchical UI Breakdown
+        st.markdown(
+            f"""
+```text
+Lifecycle CO2e: {emiss_ml['total_co2e']:.2f} t
+├── Well-to-Tank:   {emiss_ml['well_to_tank']:.2f} t
+├── Tank-to-Wake:   {emiss_ml['tank_to_wake']:.2f} t
+└── Methane / Slip: {emiss_ml.get('slip', 0.0):.2f} t
+```
+            """
+        )
+        with st.expander(f"📚 Assumptions & Data Sources ({fuel_sel} - {pathway_sel} pathway)", expanded=False):
+            prof_dict = emiss_ml.get("profile", {})
+            st.markdown(f"- **Assumption Flag:** `{prof_dict.get('assumption_flag', 'Illustrative project assumptions')}`")
+            st.markdown(f"- **Primary Regulatory Source:** `{prof_dict.get('source', 'IMO / GREET')}` ({prof_dict.get('source_year', 2023)})")
+            st.markdown(f"- **Emission Factors (t CO2e/t):** TtW: `{prof_dict.get('ttw_factor', 0):.3f}` | WtT: `{prof_dict.get('wtt_factor', 0):.3f}` | Slip: `{prof_dict.get('slip_factor', 0):.3f}`")
+            st.markdown(f"- **Technical Notes:** {prof_dict.get('notes', 'Standard maritime fuel parameters.')}")
 
         fig_bar = go.Figure(
             go.Bar(

@@ -11,6 +11,7 @@ const viewSubtitle = document.getElementById('view-subtitle');
 
 const pageMeta = {
   planner: { title: 'Fleet Planner', sub: 'Configure constraints and optimize fleet assignment across regional shipping corridors.' },
+  network: { title: 'Network Builder & Topology', sub: 'Configure maritime corridors, import ports from the global catalog, and optimize custom fleet networks.' },
   predictor: { title: 'Fuel Consumption Predictor', sub: 'Estimate single-voyage bunker burn and compare classical baseline vs QIEA-tuned predictors.' },
   fuels: { title: 'Alternative Marine Fuels', sub: 'Evaluate volumetric energy density, lifecycle emissions, and cargo slot displacement.' },
   shore: { title: 'Port Shore Power (Cold Ironing)', sub: 'Assess auxiliary generator fuel displacement against municipal electric grid carbon factors.' },
@@ -35,15 +36,25 @@ navItems.forEach(item => {
       viewSubtitle.textContent = pageMeta[targetPage].sub;
     }
 
-    // Trigger initial load for pages
-    if (targetPage === 'predictor') loadPredictor();
-    if (targetPage === 'fuels') loadFuels();
-    if (targetPage === 'shore') loadShorePower();
-    if (targetPage === 'scenarios') loadScenarios();
-    if (targetPage === 'benchmark') loadBenchmark();
-    if (targetPage === 'casestudy') loadCaseStudy();
+    // Trigger initial load for pages only once, or resize charts on revisits
+    if (!loadedPages[targetPage]) {
+      if (targetPage === 'network') loadNetwork();
+      if (targetPage === 'predictor') loadPredictor();
+      if (targetPage === 'fuels') loadFuels();
+      if (targetPage === 'shore') loadShorePower();
+      if (targetPage === 'scenarios') loadScenarios();
+      if (targetPage === 'benchmark') loadBenchmark();
+      if (targetPage === 'casestudy') loadCaseStudy();
+      loadedPages[targetPage] = true;
+    } else {
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
+    }
   });
 });
+
+const loadedPages = { planner: true };
 
 // Formatters
 const fmtNum = (n) => (n != null ? Math.round(n).toLocaleString() : '-');
@@ -93,17 +104,10 @@ async function fetchPlannerData(forceRecompute = false) {
 
   try {
     const res = await fetch(`/api/plan?w_fuel=${w_f}&w_cost=${w_c}&w_emiss=${w_e}&speed_cap=${speed}&force_recompute=${forceRecompute}`);
-    if (!res.ok) {
-      throw new Error(`Planner API returned HTTP ${res.status}: ${res.statusText}`);
-    }
     const data = await res.json();
     renderPlanner(data);
   } catch (err) {
     console.error('Failed to fetch plan:', err);
-    ['delta-fuel', 'delta-cost', 'delta-emiss', 'delta-ci'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = 'Retry Needed';
-    });
   } finally {
     runOptBtn.disabled = false;
     runOptBtn.textContent = '▶ Run Optimization';
@@ -182,33 +186,47 @@ function renderPlanner(data) {
 
   // Plotly: Emissions Breakdown Chart
   const details = opt.route_details || {};
-  let ttw = 0, wtt = 0, berth = 0;
+  let ttw = 0, wtt = 0, slip = 0, berth = 0;
 
   if (opt.emissions_breakdown) {
     ttw = opt.emissions_breakdown.ttw_co2e_tonnes || 0;
     wtt = opt.emissions_breakdown.wtt_co2e_tonnes || 0;
+    slip = opt.emissions_breakdown.slip_co2e_tonnes || 0;
     berth = opt.emissions_breakdown.berth_co2e_tonnes || 0;
   } else {
     Object.values(details).forEach(d => {
       ttw += (d.voyage_ttw_emissions_t || 0);
       wtt += (d.voyage_wtt_emissions_t || 0);
+      slip += (d.slip_emissions_t || 0);
       berth += (d.berth_emissions_t || 0);
     });
   }
 
-  if (ttw === 0 && wtt === 0 && berth === 0 && (opt.total_emissions_co2e_tonnes || 0) > 0) {
+  const totalCalc = ttw + wtt + slip + berth;
+  if (totalCalc === 0 && (opt.total_emissions_co2e_tonnes || 0) > 0) {
     const tot = opt.total_emissions_co2e_tonnes;
-    ttw = tot * 0.74;
+    ttw = tot * 0.72;
     wtt = tot * 0.21;
+    slip = tot * 0.02;
     berth = tot * 0.05;
   }
 
+  // Update tree breakdown in Planner KPI card
+  const treeTot = document.getElementById('tree-plan-total');
+  if (treeTot) treeTot.textContent = `${fmtNum(optEmiss)} t`;
+  const treeWtt = document.getElementById('tree-plan-wtt');
+  if (treeWtt) treeWtt.textContent = `${fmtNum(wtt)} t`;
+  const treeTtw = document.getElementById('tree-plan-ttw');
+  if (treeTtw) treeTtw.textContent = `${fmtNum(ttw)} t`;
+  const treeSlip = document.getElementById('tree-plan-slip');
+  if (treeSlip) treeSlip.textContent = `${fmtNum(slip + berth)} t (Slip: ${fmtNum(slip)} t, Berth: ${fmtNum(berth)} t)`;
+
   Plotly.newPlot('chart-emiss', [{
-    x: ['Tank-to-Wake (Combustion)', 'Well-to-Tank (Upstream)', 'Port Berth (Aux/Shore)'],
-    y: [Math.round(ttw), Math.round(wtt), Math.round(berth)],
+    x: ['Well-to-Tank (Upstream)', 'Tank-to-Wake (Combustion)', 'Methane / Fuel Slip', 'Port Berth (Aux/Shore)'],
+    y: [Math.round(wtt), Math.round(ttw), Math.round(slip), Math.round(berth)],
     type: 'bar',
-    marker: { color: ['#0f4c81', '#0d9488', '#d97706'] },
-    text: [Math.round(ttw), Math.round(wtt), Math.round(berth)].map(v => `${fmtNum(v)} t`),
+    marker: { color: ['#0d9488', '#0f4c81', '#b45309', '#d97706'] },
+    text: [Math.round(wtt), Math.round(ttw), Math.round(slip), Math.round(berth)].map(v => `${fmtNum(v)} t`),
     textposition: 'auto'
   }], {
     margin: { t: 20, r: 20, l: 50, b: 40 },
@@ -216,6 +234,451 @@ function renderPlanner(data) {
     plot_bgcolor: 'rgba(0,0,0,0)',
     font: { family: 'Inter, sans-serif' },
     yaxis: { title: 'Emissions (t CO2e)', gridcolor: '#f1f5f9' }
+  }, { responsive: true, displayModeBar: false });
+}
+
+// ================= NETWORK BUILDER LOGIC =================
+const DEFAULT_DEMO_PORTS = {
+  "Port of Nhava Sheva (Mumbai)": { name: "Port of Nhava Sheva (Mumbai)", lat: 18.95, lon: 72.95, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG", "Methanol"] },
+  "Port of Kochi": { name: "Port of Kochi", lat: 9.97, lon: 76.28, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG"] },
+  "V.O. Chidambaranar Port (Tuticorin)": { name: "V.O. Chidambaranar Port (Tuticorin)", lat: 8.76, lon: 78.13, shore_power_available: false, bunkering_fuels: ["HFO", "MGO"] },
+  "Chennai Port": { name: "Chennai Port", lat: 13.08, lon: 80.29, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG", "Methanol"] },
+  "Port of Colombo": { name: "Port of Colombo", lat: 6.94, lon: 79.84, shore_power_available: true, bunkering_fuels: ["HFO", "MGO", "LNG"] },
+  "Port of Chittagong": { name: "Port of Chittagong", lat: 22.32, lon: 91.81, shore_power_available: false, bunkering_fuels: ["HFO", "MGO"] }
+};
+
+const DEFAULT_DEMO_ROUTES = [
+  { route_id: "R1", name: "Mumbai - Kochi", origin: "Port of Nhava Sheva (Mumbai)", destination: "Port of Kochi", distance_nm: 580, annual_demand_teu: 120000, sea_margin: 0.30 },
+  { route_id: "R2", name: "Kochi - Tuticorin", origin: "Port of Kochi", destination: "V.O. Chidambaranar Port (Tuticorin)", distance_nm: 190, annual_demand_teu: 80000, sea_margin: 0.25 },
+  { route_id: "R3", name: "Tuticorin - Colombo", origin: "V.O. Chidambaranar Port (Tuticorin)", destination: "Port of Colombo", distance_nm: 150, annual_demand_teu: 95000, sea_margin: 0.20 },
+  { route_id: "R4", name: "Colombo - Chennai", origin: "Port of Colombo", destination: "Chennai Port", distance_nm: 390, annual_demand_teu: 110000, sea_margin: 0.30 },
+  { route_id: "R5", name: "Chennai - Chittagong", origin: "Chennai Port", destination: "Port of Chittagong", distance_nm: 890, annual_demand_teu: 135000, sea_margin: 0.35 }
+];
+
+const DEFAULT_CATALOG_PORTS = [
+  { name: "Port of Nhava Sheva (Mumbai)", lat: 18.95, lon: 72.95 },
+  { name: "Port of Kochi", lat: 9.97, lon: 76.28 },
+  { name: "V.O. Chidambaranar Port (Tuticorin)", lat: 8.76, lon: 78.13 },
+  { name: "Chennai Port", lat: 13.08, lon: 80.29 },
+  { name: "Port of Colombo", lat: 6.94, lon: 79.84 },
+  { name: "Port of Chittagong", lat: 22.32, lon: 91.81 },
+  { name: "Port of Singapore", lat: 1.29, lon: 103.85 },
+  { name: "Port of Shanghai", lat: 31.23, lon: 121.47 },
+  { name: "Port of Rotterdam", lat: 51.92, lon: 4.48 },
+  { name: "Port of Jebel Ali (Dubai)", lat: 25.01, lon: 55.06 },
+  { name: "Port of Busan", lat: 35.10, lon: 129.04 },
+  { name: "Port of Antwerp", lat: 51.22, lon: 4.40 },
+  { name: "Port of Ningbo-Zhoushan", lat: 29.87, lon: 121.55 },
+  { name: "Port of Guangzhou", lat: 23.13, lon: 113.26 },
+  { name: "Port of Qingdao", lat: 36.07, lon: 120.38 },
+  { name: "Port of Tianjin", lat: 39.12, lon: 117.20 },
+  { name: "Port of Hong Kong", lat: 22.32, lon: 114.17 },
+  { name: "Port of Hamburg", lat: 53.55, lon: 9.99 },
+  { name: "Port of Los Angeles", lat: 33.74, lon: -118.27 },
+  { name: "Port of Long Beach", lat: 33.77, lon: -118.19 },
+  { name: "Port of New York & New Jersey", lat: 40.67, lon: -74.12 }
+];
+
+let networkPorts = { ...DEFAULT_DEMO_PORTS };
+let networkRoutes = [...DEFAULT_DEMO_ROUTES];
+let catalogPorts = [...DEFAULT_CATALOG_PORTS];
+let networkInitialized = false;
+
+function computeClientHaversine(lat1, lon1, lat2, lon2, detour = 1.15) {
+  const R = 3440.065; // Nautical miles radius
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * detour * 10) / 10;
+}
+
+async function loadNetwork() {
+  populateCatalogDropdown();
+  renderNetworkUI();
+
+  if (!networkInitialized) {
+    await fetchCatalogAndInit();
+    networkInitialized = true;
+  }
+}
+
+function populateCatalogDropdown() {
+  const catSelect = document.getElementById('net-catalog-select');
+  if (catSelect) {
+    catSelect.innerHTML = '';
+    catalogPorts.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = `${p.name} (${Number(p.lat).toFixed(2)}, ${Number(p.lon).toFixed(2)})`;
+      catSelect.appendChild(opt);
+    });
+  }
+}
+
+async function fetchCatalogAndInit() {
+  try {
+    let res = await fetch('/api/ports-catalog');
+    if (!res.ok) res = await fetch('/api/network-catalog');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.catalog || data.catalog_ports) {
+        catalogPorts = data.catalog || data.catalog_ports;
+        populateCatalogDropdown();
+      }
+      if (data.demo_network && data.demo_network.ports) {
+        networkPorts = { ...data.demo_network.ports };
+        networkRoutes = [...(data.demo_network.routes || DEFAULT_DEMO_ROUTES)];
+      }
+    }
+  } catch (err) {
+    console.warn('API catalog fetch failed, using built-in defaults:', err);
+  }
+  renderNetworkUI();
+}
+
+function updatePortDropdowns() {
+  const oSel = document.getElementById('net-origin-select');
+  const dSel = document.getElementById('net-dest-select');
+  if (!oSel || !dSel) return;
+
+  const currentO = oSel.value;
+  const currentD = dSel.value;
+
+  oSel.innerHTML = '';
+  dSel.innerHTML = '';
+
+  const portKeys = Object.keys(networkPorts);
+  if (portKeys.length === 0) {
+    networkPorts = { ...DEFAULT_DEMO_PORTS };
+  }
+
+  const portNames = Object.keys(networkPorts).sort();
+  portNames.forEach((pName) => {
+    const p = networkPorts[pName];
+    const optO = document.createElement('option');
+    optO.value = pName;
+    optO.textContent = `${p.name || pName} [${p.lat}, ${p.lon}]`;
+    oSel.appendChild(optO);
+
+    const optD = document.createElement('option');
+    optD.value = pName;
+    optD.textContent = `${p.name || pName} [${p.lat}, ${p.lon}]`;
+    dSel.appendChild(optD);
+  });
+
+  if (currentO && portNames.includes(currentO)) {
+    oSel.value = currentO;
+  } else if (portNames.length > 0) {
+    oSel.value = portNames[0];
+  }
+
+  if (currentD && portNames.includes(currentD)) {
+    dSel.value = currentD;
+  } else if (portNames.length > 1) {
+    dSel.value = portNames[1];
+  } else if (portNames.length > 0) {
+    dSel.value = portNames[0];
+  }
+
+  calculateNetworkDistance();
+}
+
+async function calculateNetworkDistance() {
+  const oSel = document.getElementById('net-origin-select');
+  const dSel = document.getElementById('net-dest-select');
+  const distInput = document.getElementById('net-route-distance');
+  if (!oSel || !dSel || !distInput) return;
+
+  const p1 = networkPorts[oSel.value];
+  const p2 = networkPorts[dSel.value];
+  if (!p1 || !p2 || oSel.value === dSel.value) {
+    distInput.value = 0;
+    return;
+  }
+
+  // Fast client-side calculation first
+  const localDist = computeClientHaversine(p1.lat, p1.lon, p2.lat, p2.lon, 1.15);
+  distInput.value = localDist;
+
+  try {
+    const res = await fetch(`/api/calculate-distance?lat1=${p1.lat}&lon1=${p1.lon}&lat2=${p2.lat}&lon2=${p2.lon}&detour_factor=1.15`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.distance_nm) distInput.value = data.distance_nm;
+    }
+  } catch (err) {
+    // Already set via computeClientHaversine
+  }
+}
+
+document.getElementById('net-origin-select')?.addEventListener('change', calculateNetworkDistance);
+document.getElementById('net-dest-select')?.addEventListener('change', calculateNetworkDistance);
+
+// Add custom port
+document.getElementById('net-btn-add-custom-port')?.addEventListener('click', () => {
+  const name = document.getElementById('net-custom-name').value.trim();
+  const lat = parseFloat(document.getElementById('net-custom-lat').value);
+  const lon = parseFloat(document.getElementById('net-custom-lon').value);
+  const shore = document.getElementById('net-custom-shore').checked;
+
+  if (!name) { alert('Please enter a port name.'); return; }
+  if (isNaN(lat) || lat < -90 || lat > 90) { alert('Latitude must be between -90 and 90.'); return; }
+  if (isNaN(lon) || lon < -180 || lon > 180) { alert('Longitude must be between -180 and 180.'); return; }
+
+  networkPorts[name] = {
+    name: name,
+    lat: lat,
+    lon: lon,
+    shore_power_available: shore,
+    bunkering_fuels: ['HFO', 'MGO', 'VLSFO']
+  };
+
+  document.getElementById('net-custom-name').value = '';
+  document.getElementById('net-custom-lat').value = '';
+  document.getElementById('net-custom-lon').value = '';
+  document.getElementById('net-custom-shore').checked = false;
+
+  renderNetworkUI();
+});
+
+// Import catalog port
+document.getElementById('net-btn-import-port')?.addEventListener('click', () => {
+  const catSelect = document.getElementById('net-catalog-select');
+  const selName = catSelect.value;
+  const p = catalogPorts.find(x => x.name === selName);
+  if (!p) return;
+
+  networkPorts[p.name] = {
+    name: p.name,
+    lat: p.lat,
+    lon: p.lon,
+    shore_power_available: false,
+    bunkering_fuels: ['HFO', 'MGO']
+  };
+
+  renderNetworkUI();
+});
+
+// Add corridor
+document.getElementById('net-btn-add-route')?.addEventListener('click', () => {
+  if (networkRoutes.length >= 8) {
+    alert('Maximum 8 active corridors permitted in network optimization.');
+    return;
+  }
+
+  const oSel = document.getElementById('net-origin-select');
+  const dSel = document.getElementById('net-dest-select');
+  const demand = parseFloat(document.getElementById('net-route-demand').value);
+  const weatherStr = document.getElementById('net-route-weather').value;
+  const dist = parseFloat(document.getElementById('net-route-distance').value);
+
+  if (oSel.value === dSel.value) {
+    alert('Origin and Destination ports must be different.');
+    return;
+  }
+  if (isNaN(demand) || demand <= 0) {
+    alert('Annual demand must be greater than 0.');
+    return;
+  }
+
+  const weatherMap = { 'Calm (0.15)': 0.15, 'Moderate (0.30)': 0.30, 'Rough (0.50)': 0.50 };
+  const seaMargin = weatherMap[weatherStr] || 0.30;
+  const rId = `R${networkRoutes.length + 1}`;
+
+  networkRoutes.push({
+    route_id: rId,
+    name: `${oSel.value} - ${dSel.value}`,
+    origin: oSel.value,
+    destination: dSel.value,
+    distance_nm: dist,
+    annual_demand_teu: demand,
+    sea_margin: seaMargin
+  });
+
+  renderNetworkUI();
+});
+
+function deleteRoute(idx) {
+  networkRoutes.splice(idx, 1);
+  networkRoutes.forEach((r, i) => { r.route_id = `R${i + 1}`; });
+  renderNetworkUI();
+}
+
+// Reset demo
+document.getElementById('net-btn-reset')?.addEventListener('click', () => {
+  fetchCatalogAndInit();
+});
+
+// Export JSON
+document.getElementById('net-btn-export')?.addEventListener('click', () => {
+  const payload = {
+    name: "Custom Exported Fleet Network",
+    ports: networkPorts,
+    routes: networkRoutes
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'green_fleet_network.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Optimize custom network
+document.getElementById('net-btn-apply')?.addEventListener('click', async () => {
+  if (networkRoutes.length === 0) {
+    alert('Please define at least 1 corridor before optimizing.');
+    return;
+  }
+
+  const applyBtn = document.getElementById('net-btn-apply');
+  applyBtn.disabled = true;
+  applyBtn.textContent = 'Optimizing Network...';
+
+  const payload = {
+    name: "User Configured Fleet Network",
+    ports: networkPorts,
+    routes: networkRoutes
+  };
+
+  try {
+    const res = await fetch('/api/optimize-network', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert('Optimization Error: ' + (data.detail || 'Failed to solve custom network.'));
+      return;
+    }
+
+    // Switch to planner view and render results
+    const plannerNav = document.querySelector('.nav-item[data-page="planner"]');
+    if (plannerNav) plannerNav.click();
+    renderPlanner(data);
+
+    if (data.infeasibility_suggestion) {
+      alert('Network Note: ' + data.infeasibility_suggestion);
+    }
+  } catch (err) {
+    console.error('Failed to optimize custom network:', err);
+    alert('Error running optimization on custom network.');
+  } finally {
+    applyBtn.disabled = false;
+    applyBtn.textContent = '⚡ Optimize Network';
+  }
+});
+
+function renderNetworkUI() {
+  updatePortDropdowns();
+
+  // Update corridor count
+  const countSpan = document.getElementById('net-count-routes');
+  if (countSpan) countSpan.textContent = networkRoutes.length;
+
+  const badgeStatus = document.getElementById('net-badge-status');
+  if (badgeStatus) {
+    badgeStatus.textContent = `${networkRoutes.length} Corridors | ${Object.keys(networkPorts).length} Ports`;
+  }
+
+  // Update corridors table
+  const tbody = document.getElementById('tbody-net-routes');
+  if (tbody) {
+    tbody.innerHTML = '';
+    networkRoutes.forEach((r, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${r.route_id}</b> (${r.name})</td>
+        <td>${r.origin}</td>
+        <td>${r.destination}</td>
+        <td><b>${Math.round(r.distance_nm).toLocaleString()} nm</b></td>
+        <td>${Math.round(r.annual_demand_teu).toLocaleString()} TEU</td>
+        <td><span class="badge ${r.sea_margin > 0.35 ? 'badge-amber' : 'badge-navy'}">${r.sea_margin}</span></td>
+        <td><button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #dc2626; border-color: #fecaca;" onclick="deleteRoute(${idx})">✕ Delete</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Render Network Plotly Map
+  renderNetworkMap();
+}
+
+function renderNetworkMap() {
+  const mapDiv = document.getElementById('chart-network-map');
+  if (!mapDiv) return;
+
+  const portNames = Object.keys(networkPorts);
+  const portLats = portNames.map(k => networkPorts[k].lat);
+  const portLons = portNames.map(k => networkPorts[k].lon);
+  const portLabels = portNames.map(k => `${k} (${networkPorts[k].shore_power_available ? '⚡ Shore Power' : 'No Cold Ironing'})`);
+
+  const traces = [];
+
+  // Route lines
+  networkRoutes.forEach((r) => {
+    const p1 = networkPorts[r.origin];
+    const p2 = networkPorts[r.destination];
+    if (p1 && p2) {
+      traces.push({
+        type: 'scattergeo',
+        locationmode: 'world',
+        lat: [p1.lat, p2.lat],
+        lon: [p1.lon, p2.lon],
+        mode: 'lines',
+        line: { width: 2.5, color: '#0f4c81' },
+        hoverinfo: 'text',
+        text: `${r.route_id}: ${r.origin} → ${r.destination} (${Math.round(r.distance_nm)} nm)`,
+        showlegend: false
+      });
+    }
+  });
+
+  // Port markers
+  traces.push({
+    type: 'scattergeo',
+    locationmode: 'world',
+    lat: portLats,
+    lon: portLons,
+    mode: 'markers+text',
+    text: portNames,
+    textposition: 'top center',
+    textfont: { family: 'Inter, sans-serif', size: 11, color: '#0f172a' },
+    marker: {
+      size: 9,
+      color: portNames.map(k => networkPorts[k].shore_power_available ? '#0d9488' : '#d97706'),
+      line: { width: 1.5, color: '#ffffff' }
+    },
+    hoverinfo: 'text',
+    hovertext: portLabels,
+    name: 'Terminals / Ports'
+  });
+
+  Plotly.newPlot('chart-network-map', traces, {
+    geo: {
+      projection: { type: 'equirectangular' },
+      showland: true,
+      landcolor: '#f1f5f9',
+      showocean: true,
+      oceancolor: '#f8fafc',
+      showcoastlines: true,
+      coastlinecolor: '#cbd5e1',
+      showcountries: true,
+      countrycolor: '#e2e8f0',
+      lataxis: { range: [-10, 65] },
+      lonaxis: { range: [-10, 135] }
+    },
+    margin: { t: 10, r: 10, l: 10, b: 10 },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Inter, sans-serif' },
+    legend: { orientation: 'h', y: 1.05 }
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -227,6 +690,7 @@ const predFuel = document.getElementById('pred-fuel');
 const predModel = document.getElementById('pred-model');
 const predDist = document.getElementById('pred-dist');
 const predWeather = document.getElementById('pred-weather');
+const predPathway = document.getElementById('pred-pathway');
 
 const vesselDwtMap = {
   handymax_feeder: 22000,
@@ -275,7 +739,22 @@ if (predVessel) {
   });
 }
 
-if (predFuel) predFuel.addEventListener('change', loadPredictor);
+if (predFuel) {
+  predFuel.addEventListener('change', () => {
+    // Show/hide pathway selector based on whether fuel supports pathways
+    const f = predFuel.value;
+    const pwGroup = document.getElementById('group-pred-pathway');
+    if (pwGroup) {
+      if (['Methanol', 'Ammonia', 'Hydrogen'].includes(f)) {
+        pwGroup.style.display = 'block';
+      } else {
+        pwGroup.style.display = 'none';
+      }
+    }
+    loadPredictor();
+  });
+}
+if (predPathway) predPathway.addEventListener('change', loadPredictor);
 if (predModel) predModel.addEventListener('change', loadPredictor);
 if (predDist) predDist.addEventListener('input', loadPredictor);
 
@@ -340,6 +819,7 @@ async function execLoadPredictor() {
   if (statusEl) statusEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;margin-right:4px;"></span> Inferring...';
 
   try {
+    const pw = predPathway ? predPathway.value : 'default';
     const queryParams = new URLSearchParams({
       vessel: v,
       speed: sp,
@@ -347,6 +827,7 @@ async function execLoadPredictor() {
       distance: dist,
       weather: w,
       fuel_type: fType,
+      pathway: pw,
       model_choice: mChoice,
       mode: 'both'
     });
@@ -361,6 +842,7 @@ async function execLoadPredictor() {
     const econ = data.economics || {};
     const emiss = data.emissions || {};
     const val = data.model_validation || {};
+    const prof = emiss.emission_profile || {};
 
     // Update KPI Displays
     const mlFuel = pred.ml_prediction_tonnes != null ? pred.ml_prediction_tonnes : pred.fuel_tonnes;
@@ -395,6 +877,36 @@ async function execLoadPredictor() {
     if (ciBadgeEl) {
       ciBadgeEl.textContent = `Carbon Intensity: ${emiss.carbon_intensity_g_tnm ? emiss.carbon_intensity_g_tnm.toFixed(1) : '-'} g/t-nm`;
     }
+
+    // Update Hierarchical Tree UI Breakdown
+    const treeTotEl = document.getElementById('tree-pred-total');
+    if (treeTotEl) treeTotEl.textContent = `${emiss.total_co2e_tonnes ? emiss.total_co2e_tonnes.toFixed(2) : '0.00'} t CO2e`;
+    const treeWttEl = document.getElementById('tree-pred-wtt');
+    if (treeWttEl) treeWttEl.textContent = `${emiss.well_to_tank_tonnes ? emiss.well_to_tank_tonnes.toFixed(2) : '0.00'} t`;
+    const treeTtwEl = document.getElementById('tree-pred-ttw');
+    if (treeTtwEl) treeTtwEl.textContent = `${emiss.tank_to_wake_tonnes ? emiss.tank_to_wake_tonnes.toFixed(2) : '0.00'} t`;
+    const treeSlipEl = document.getElementById('tree-pred-slip');
+    if (treeSlipEl) treeSlipEl.textContent = `${emiss.slip_co2e_tonnes ? emiss.slip_co2e_tonnes.toFixed(2) : '0.00'} t`;
+    const treePwBadge = document.getElementById('tree-pred-pathway-badge');
+    if (treePwBadge) treePwBadge.textContent = `Pathway: ${emiss.pathway_used || pw} | Emission Factor: ${prof.lifecycle_factor ? prof.lifecycle_factor.toFixed(3) : '-'} t CO2e/t`;
+
+    // Update Assumptions & Verified Sources Card
+    const srcFuelName = document.getElementById('pred-src-fuel-name');
+    if (srcFuelName) srcFuelName.textContent = `${prof.fuel_name || fType} (${emiss.pathway_used || pw} pathway)`;
+    const srcBadge = document.getElementById('pred-src-badge');
+    if (srcBadge) {
+      const isReal = (prof.assumption_flag || '').includes('Real / Publicly Sourced');
+      srcBadge.textContent = prof.assumption_flag || 'Illustrative project assumptions';
+      srcBadge.className = `status-badge ${isReal ? 'status-pass' : 'status-fail'}`;
+    }
+    const srcSource = document.getElementById('pred-src-source');
+    if (srcSource) srcSource.textContent = `${prof.source || 'config/params.yaml'} (${prof.source_year || 2023})`;
+    const srcFactors = document.getElementById('pred-src-factors');
+    if (srcFactors) {
+      srcFactors.textContent = `TtW: ${(prof.ttw_factor || 0).toFixed(3)} | WtT: ${(prof.wtt_factor || 0).toFixed(3)} | Slip: ${(prof.slip_factor || 0).toFixed(3)} | WtW: ${(prof.lifecycle_factor || 0).toFixed(3)}`;
+    }
+    const srcNotes = document.getElementById('pred-src-notes');
+    if (srcNotes) srcNotes.textContent = prof.notes || 'Baseline maritime fuel assumptions.';
 
     const daysEl = document.getElementById('pred-res-days');
     if (daysEl) daysEl.textContent = `${pred.leg_days ? pred.leg_days.toFixed(1) : '-'} days`;
@@ -613,6 +1125,22 @@ async function runFuelOptimization() {
     const deltaEmiss = document.getElementById('fuel-opt-delta-emiss');
     if (deltaEmiss) deltaEmiss.textContent = fmtDelta(optEmiss, convEmiss);
 
+    // Update fuel-opt emissions breakdown tree
+    const brk = opt.emissions_breakdown || {};
+    const optWtt = brk.wtt_co2e_tonnes || (optEmiss * 0.21);
+    const optTtw = brk.ttw_co2e_tonnes || (optEmiss * 0.72);
+    const optSlip = brk.slip_co2e_tonnes || (optEmiss * 0.02);
+    const optBerth = brk.berth_co2e_tonnes || (optEmiss * 0.05);
+
+    const fTreeTot = document.getElementById('tree-fuelopt-total');
+    if (fTreeTot) fTreeTot.textContent = `${fmtNum(optEmiss)} t`;
+    const fTreeWtt = document.getElementById('tree-fuelopt-wtt');
+    if (fTreeWtt) fTreeWtt.textContent = `${fmtNum(optWtt)} t`;
+    const fTreeTtw = document.getElementById('tree-fuelopt-ttw');
+    if (fTreeTtw) fTreeTtw.textContent = `${fmtNum(optTtw)} t`;
+    const fTreeSlip = document.getElementById('tree-fuelopt-slip');
+    if (fTreeSlip) fTreeSlip.textContent = `${fmtNum(optSlip + optBerth)} t (Slip: ${fmtNum(optSlip)} t, Berth: ${fmtNum(optBerth)} t)`;
+
     const optCI = opt.carbon_intensity_g_tnm || 0;
     const kpiCI = document.getElementById('fuel-opt-kpi-ci');
     if (kpiCI) kpiCI.textContent = `${optCI.toFixed(1)} g/t-nm`;
@@ -669,11 +1197,19 @@ async function loadFuels() {
       tbody.innerHTML = '';
       rows.forEach(row => {
         const tr = document.createElement('tr');
+        const wttVal = row.wtt_co2e_tonnes != null ? row.wtt_co2e_tonnes : 0;
+        const ttwVal = row.ttw_co2e_tonnes != null ? row.ttw_co2e_tonnes : 0;
+        const slipVal = row.slip_co2e_tonnes != null ? row.slip_co2e_tonnes : 0;
         tr.innerHTML = `
-          <td><b>${row.Fuel || row.fuel_type}</b></td>
+          <td><b>${row.Fuel || row.fuel_type}</b> <small style="display:block;color:var(--slate-400);">${row.pathway || 'fossil'}</small></td>
           <td><b>${row['Fuel Cost'] || '$' + fmtNum(row.fuel_cost_usd)}</b></td>
           <td>${row['Fuel Consumption'] || row.fuel_mass_tonnes.toFixed(1) + ' t'}</td>
           <td><span style="color: var(--teal); font-weight: 700;">${row['Lifecycle CO2e'] || fmtNum(row.lifecycle_co2e_tonnes) + ' t'}</span></td>
+          <td style="font-family: monospace; font-size: 0.72rem; line-height: 1.35;">
+            <div>├── WtT: <b>${wttVal.toFixed(1)} t</b></div>
+            <div>├── TtW: <b>${ttwVal.toFixed(1)} t</b></div>
+            <div>└── Slip: <b>${slipVal.toFixed(1)} t</b></div>
+          </td>
           <td><span class="status-badge ${row.bunkering_feasible ? 'status-pass' : 'status-fail'}">${row.Availability || (row.bunkering_feasible ? 'PASS' : 'FAIL')}</span></td>
           <td><span class="status-badge ${row.is_compatible ? 'status-pass' : 'status-fail'}">${row.Compatibility || (row.is_compatible ? 'Compatible' : 'Incompatible')}</span></td>
           <td>${row.cargo_loss_pct != null ? row.cargo_loss_pct.toFixed(1) + '%' : '0.0%'}</td>
@@ -698,20 +1234,38 @@ async function loadFuels() {
       yaxis: { title: 'Procurement Cost ($)', gridcolor: '#f1f5f9' }
     }, { responsive: true, displayModeBar: false });
 
-    // Lifecycle GHG Bar
-    Plotly.newPlot('chart-fuel-ghg', [{
-      x: rows.map(r => r.fuel_type || r.Fuel),
-      y: rows.map(r => r.lifecycle_co2e_tonnes),
+    // Lifecycle GHG Stacked Breakdown Bar Chart
+    const fuelsList = rows.map(r => r.fuel_type || r.Fuel);
+    const traceWtt = {
+      x: fuelsList,
+      y: rows.map(r => r.wtt_co2e_tonnes != null ? r.wtt_co2e_tonnes : 0),
+      name: 'Well-to-Tank (Upstream)',
       type: 'bar',
-      marker: { color: ['#2b2d42', '#334155', '#457b9d', '#0d9488', '#10b981', '#06b6d4'].slice(0, rows.length) },
-      text: rows.map(r => fmtNum(r.lifecycle_co2e_tonnes) + ' t'),
-      textposition: 'auto'
-    }], {
-      margin: { t: 20, r: 20, l: 50, b: 40 },
+      marker: { color: '#0d9488' }
+    };
+    const traceTtw = {
+      x: fuelsList,
+      y: rows.map(r => r.ttw_co2e_tonnes != null ? r.ttw_co2e_tonnes : 0),
+      name: 'Tank-to-Wake (Combustion)',
+      type: 'bar',
+      marker: { color: '#0f4c81' }
+    };
+    const traceSlip = {
+      x: fuelsList,
+      y: rows.map(r => r.slip_co2e_tonnes != null ? r.slip_co2e_tonnes : 0),
+      name: 'Methane / Fuel Slip',
+      type: 'bar',
+      marker: { color: '#b45309' }
+    };
+
+    Plotly.newPlot('chart-fuel-ghg', [traceWtt, traceTtw, traceSlip], {
+      barmode: 'stack',
+      margin: { t: 25, r: 20, l: 50, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
       font: { family: 'Inter, sans-serif' },
-      yaxis: { title: 'Well-to-Wake CO2e (t)', gridcolor: '#f1f5f9' }
+      yaxis: { title: 'Lifecycle CO2e (t)', gridcolor: '#f1f5f9' },
+      legend: { orientation: 'h', y: 1.15 }
     }, { responsive: true, displayModeBar: false });
 
     // Render Assumptions & Parameters Container
@@ -746,11 +1300,28 @@ async function loadFuels() {
           </div>
           <p style="font-size:0.75rem; color:var(--slate-500); margin-bottom:0.5rem;">Storage: ${fp.tank_storage_factor?.storage_type} | Cargo Slot Loss: ${fp.tank_storage_factor?.capacity_penalty_pct}%</p>
           <div style="font-size:0.75rem; color:var(--slate-600); margin-bottom:0.5rem;"><b>Vessel Compatibility:</b> ${fp.vessel_compatibility?.join(', ')}</div>
+          <!-- Structured Lifecycle GHG Emission Factors -->
+          <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:6px 10px; margin-bottom:0.6rem; font-size:11px; font-family:monospace;">
+            <div style="font-weight:700; color:#0f172a; margin-bottom:2px;">Lifecycle CO2e Formula: WtT + TtW + Slip = WtW</div>
+            <div style="color:#334155;">
+              • Tank-to-Wake (combustion): <b>${fp.lifecycle_emissions?.ef_tank_to_wake?.toFixed(3) || '0.000'} t CO2e/t</b><br>
+              • Well-to-Tank (upstream): <b>${JSON.stringify(fp.lifecycle_emissions?.ef_well_to_tank || {})} t CO2e/t</b><br>
+              • Methane / Fuel Slip: <b>${(fp.lifecycle_emissions?.slip_factor_co2e_per_tonne || 0).toFixed(3)} t CO2e/t</b>
+            </div>
+          </div>
           <div>${assumptionsList}</div>
         `;
         assumptionsContainer.appendChild(card);
       });
     }
+
+    // Guarantee Plotly charts compute correct geometry even if rendered right when tab switches
+    setTimeout(() => {
+      ['chart-fuel-cost', 'chart-fuel-ghg'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && window.Plotly) Plotly.Plots.resize(el);
+      });
+    }, 100);
 
   } catch (err) {
     console.error('Error loading fuels:', err);
@@ -853,16 +1424,11 @@ async function loadScenarios() {
       tbody.appendChild(tr);
     });
 
-    const kpiCount = document.getElementById('kpi-scen-count');
-    if (kpiCount) kpiCount.textContent = `${entries.length} Stress Tests`;
-    const kpiMax = document.getElementById('kpi-scen-maxcost');
-    if (kpiMax) kpiMax.textContent = `$${(maxCost / 1e6).toFixed(1)}M`;
-    const kpiMaxN = document.getElementById('kpi-scen-maxcost-name');
-    if (kpiMaxN) kpiMaxN.textContent = maxCostName;
-    const kpiMinE = document.getElementById('kpi-scen-minemiss');
-    if (kpiMinE) kpiMinE.textContent = `${fmtNum(minEmiss)} t`;
-    const kpiMinEN = document.getElementById('kpi-scen-minemiss-name');
-    if (kpiMinEN) kpiMinEN.textContent = minEmissName;
+    document.getElementById('kpi-scen-count').textContent = `${entries.length} Stress Tests`;
+    document.getElementById('kpi-scen-maxcost').textContent = `$${(maxCost / 1e6).toFixed(1)}M`;
+    document.getElementById('kpi-scen-maxcost-name').textContent = maxCostName;
+    document.getElementById('kpi-scen-minemiss').textContent = `${fmtNum(minEmiss)} t`;
+    document.getElementById('kpi-scen-minemiss-name').textContent = minEmissName;
 
     // Plot 1: Cost vs Emissions
     Plotly.newPlot('chart-scenarios', [{
@@ -1046,33 +1612,31 @@ async function loadCaseStudy() {
     const g = sum.green || {};
 
     const kpis = document.getElementById('casestudy-kpis');
-    if (kpis) {
-      kpis.innerHTML = `
-        <div class="kpi-card">
-          <div class="kpi-label">Balanced Fuel Burn</div>
-          <div class="kpi-value">${fmtNum(b.fuel_t)} t</div>
-          <div class="kpi-delta ${b.fuel_delta_t <= 0 ? 'good' : 'bad'}">${b.fuel_label || '-10.5% vs Conv'}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Balanced Operating Cost</div>
-          <div class="kpi-value">$${fmtNum(b.cost_usd)}</div>
-          <div class="kpi-delta ${b.cost_delta_usd <= 0 ? 'good' : 'bad'}">${b.cost_label || '+34.7% vs Conv'}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Lifecycle CO2e Emissions</div>
-          <div class="kpi-value" style="color: var(--teal-600);">${fmtNum(b.emissions_t)} t</div>
-          <div class="kpi-delta good">${b.emissions_label || '-53.5% vs Naive'}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Carbon Intensity (IMO CII)</div>
-          <div class="kpi-value">${b.ci_g_tnm ? b.ci_g_tnm.toFixed(2) : '5.81'} g/t-nm</div>
-          <div class="kpi-delta good">${b.ci_label || '-48.7% vs Conv'}</div>
-        </div>
-      `;
-    }
+    kpis.innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-label">Balanced Fuel Burn</div>
+        <div class="kpi-value">${fmtNum(b.fuel_t)} t</div>
+        <div class="kpi-delta ${b.fuel_delta_t <= 0 ? 'good' : 'bad'}">${b.fuel_label || '-10.5% vs Conv'}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Balanced Operating Cost</div>
+        <div class="kpi-value">$${fmtNum(b.cost_usd)}</div>
+        <div class="kpi-delta ${b.cost_delta_usd <= 0 ? 'good' : 'bad'}">${b.cost_label || '+34.7% vs Conv'}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Lifecycle CO2e Emissions</div>
+        <div class="kpi-value" style="color: var(--teal-600);">${fmtNum(b.emissions_t)} t</div>
+        <div class="kpi-delta good">${b.emissions_label || '-53.5% vs Naive'}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Carbon Intensity (IMO CII)</div>
+        <div class="kpi-value">${b.ci_g_tnm ? b.ci_g_tnm.toFixed(2) : '5.81'} g/t-nm</div>
+        <div class="kpi-delta good">${b.ci_label || '-48.7% vs Conv'}</div>
+      </div>
+    `;
 
     // Monthly Monsoon Seasonality Chart
-    if (monthly.length > 0 && document.getElementById('chart-casestudy-monthly')) {
+    if (monthly.length > 0) {
       const months = monthly.map(m => m.Month);
       const fuelNaive = monthly.map(m => m['Naive Fuel (t)']);
       const fuelOpt = monthly.map(m => m['Optimized Fuel (t)']);
@@ -1112,65 +1676,61 @@ async function loadCaseStudy() {
     }
 
     // 4 Plans Comparison Chart
-    if (document.getElementById('chart-casestudy-plans')) {
-      const planNames = ['Naive Baseline', 'Best Conventional', 'Balanced (QIEA)', 'Green Decarbonization'];
-      const planEmiss = [n.emissions_t || 148045.9, c.emissions_t || 134029.2, b.emissions_t || 68788.2, g.emissions_t || 95104.1];
-      const planCosts = [n.cost_usd || 112145985, c.cost_usd || 116764244, b.cost_usd || 157280986, g.cost_usd || 157607062];
+    const planNames = ['Naive Baseline', 'Best Conventional', 'Balanced (QIEA)', 'Green Decarbonization'];
+    const planEmiss = [n.emissions_t || 148045.9, c.emissions_t || 134029.2, b.emissions_t || 68788.2, g.emissions_t || 95104.1];
+    const planCosts = [n.cost_usd || 112145985, c.cost_usd || 116764244, b.cost_usd || 157280986, g.cost_usd || 157607062];
 
-      Plotly.newPlot('chart-casestudy-plans', [{
-        x: planNames,
-        y: planEmiss,
-        name: 'Lifecycle Emissions (t CO2e)',
-        type: 'bar',
-        marker: { color: ['#ef4444', '#f59e0b', '#0d9488', '#10b981'] },
-        text: planEmiss.map(v => `${fmtNum(v)} t`),
-        textposition: 'auto'
-      }, {
-        x: planNames,
-        y: planCosts,
-        name: 'Annual Cost ($ USD)',
-        yaxis: 'y2',
-        type: 'scatter',
-        mode: 'lines+markers',
-        line: { color: '#0f4c81', width: 3 },
-        marker: { size: 9, color: '#0f4c81' }
-      }], {
-        margin: { t: 30, r: 60, l: 60, b: 50 },
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        font: { family: 'Inter, sans-serif' },
-        yaxis: { title: 'Emissions (t CO2e)', gridcolor: '#f1f5f9' },
-        yaxis2: { title: 'Operating Cost ($)', overlaying: 'y', side: 'right' },
-        legend: { orientation: 'h', y: 1.15 }
-      }, { responsive: true, displayModeBar: false });
-    }
+    Plotly.newPlot('chart-casestudy-plans', [{
+      x: planNames,
+      y: planEmiss,
+      name: 'Lifecycle Emissions (t CO2e)',
+      type: 'bar',
+      marker: { color: ['#ef4444', '#f59e0b', '#0d9488', '#10b981'] },
+      text: planEmiss.map(v => `${fmtNum(v)} t`),
+      textposition: 'auto'
+    }, {
+      x: planNames,
+      y: planCosts,
+      name: 'Annual Cost ($ USD)',
+      yaxis: 'y2',
+      type: 'scatter',
+      mode: 'lines+markers',
+      line: { color: '#0f4c81', width: 3 },
+      marker: { size: 9, color: '#0f4c81' }
+    }], {
+      margin: { t: 30, r: 60, l: 60, b: 50 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'Inter, sans-serif' },
+      yaxis: { title: 'Emissions (t CO2e)', gridcolor: '#f1f5f9' },
+      yaxis2: { title: 'Operating Cost ($)', overlaying: 'y', side: 'right' },
+      legend: { orientation: 'h', y: 1.15 }
+    }, { responsive: true, displayModeBar: false });
 
     // Table: Corridor Routes
     const tbody = document.querySelector('#table-casestudy tbody');
-    if (tbody) {
-      tbody.innerHTML = '';
-      routes.forEach(r => {
-        const tr = document.createElement('tr');
-        const bSpeed = r['Balanced Speed (kn)'] || r['Opt Speed (kn)'] || r['Best Conv Speed (kn)'] || '-';
-        const bVsl = r['Balanced Vessels'] != null ? r['Balanced Vessels'] : (r['Opt Vessels'] != null ? r['Opt Vessels'] : '-');
-        const bOver = r['Balanced Oversupply'] != null ? r['Balanced Oversupply'] : (r['Opt Oversupply'] != null ? r['Opt Oversupply'] : '-');
-        const rel = r['Balanced Reliability (%)'] != null ? r['Balanced Reliability (%)'] : (r['Best Conv Reliability (%)'] != null ? r['Best Conv Reliability (%)'] : 95.0);
+    tbody.innerHTML = '';
+    routes.forEach(r => {
+      const tr = document.createElement('tr');
+      const bSpeed = r['Balanced Speed (kn)'] || r['Opt Speed (kn)'] || r['Best Conv Speed (kn)'] || '-';
+      const bVsl = r['Balanced Vessels'] != null ? r['Balanced Vessels'] : (r['Opt Vessels'] != null ? r['Opt Vessels'] : '-');
+      const bOver = r['Balanced Oversupply'] != null ? r['Balanced Oversupply'] : (r['Opt Oversupply'] != null ? r['Opt Oversupply'] : '-');
+      const rel = r['Balanced Reliability (%)'] != null ? r['Balanced Reliability (%)'] : (r['Best Conv Reliability (%)'] != null ? r['Best Conv Reliability (%)'] : 95.0);
 
-        tr.innerHTML = `
-          <td><b>${r['Route ID']}</b> (${r['Route Name']})</td>
-          <td>${r['Distance (nm)']} nm</td>
-          <td>${fmtNum(r['Demand (TEU)'])}</td>
-          <td>${r['Naive Speed (kn)']} kn</td>
-          <td><b style="color: var(--primary);">${bSpeed} kn</b></td>
-          <td>${r['Naive Vessels']} vsl</td>
-          <td><b style="color: var(--teal-700);">${bVsl} vsl</b></td>
-          <td>${r['Naive Oversupply']}x</td>
-          <td><b>${typeof bOver === 'number' ? bOver.toFixed(2) : bOver}x</b></td>
-          <td><span class="status-badge ${rel >= 80 ? 'status-pass' : 'status-fail'}">${rel}%</span></td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
+      tr.innerHTML = `
+        <td><b>${r['Route ID']}</b> (${r['Route Name']})</td>
+        <td>${r['Distance (nm)']} nm</td>
+        <td>${fmtNum(r['Demand (TEU)'])}</td>
+        <td>${r['Naive Speed (kn)']} kn</td>
+        <td><b style="color: var(--primary);">${bSpeed} kn</b></td>
+        <td>${r['Naive Vessels']} vsl</td>
+        <td><b style="color: var(--teal-700);">${bVsl} vsl</b></td>
+        <td>${r['Naive Oversupply']}x</td>
+        <td><b>${typeof bOver === 'number' ? bOver.toFixed(2) : bOver}x</b></td>
+        <td><span class="status-badge ${rel >= 80 ? 'status-pass' : 'status-fail'}">${rel}%</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
 
   } catch (err) {
     console.error('Error loading case study:', err);
@@ -1185,14 +1745,18 @@ document.querySelectorAll('.tab-container').forEach(container => {
     const targetTab = btn.getAttribute('data-tab');
     if (!targetTab) return;
 
+    // Toggle active button inside this container
     container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
+    // Toggle visibility of associated panes
+    // Panes are either sibling or parent-level elements with id starting with pane- or matching targetTab
     const parentSection = container.closest('section');
     if (parentSection) {
       parentSection.querySelectorAll('[id^="pane-"]').forEach(pane => {
         pane.style.display = (pane.id === `pane-${targetTab}` || pane.id === targetTab) ? 'block' : 'none';
       });
+      // Trigger resize for Plotly charts in freshly visible panes
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
         parentSection.querySelectorAll('.chart-container').forEach(c => {
@@ -1207,3 +1771,14 @@ document.querySelectorAll('.tab-container').forEach(container => {
 
 // Initial Load
 fetchPlannerData();
+
+// Defer non-critical network background loading until after primary view is interactive
+if ('requestIdleCallback' in window) {
+  requestIdleCallback(() => {
+    loadNetwork();
+  });
+} else {
+  setTimeout(() => {
+    loadNetwork();
+  }, 200);
+}

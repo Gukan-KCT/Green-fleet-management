@@ -269,6 +269,8 @@ from src.models.physics import (
     calculate_alternative_fuel_mass,
     calculate_emissions,
     get_fuel_price_usd_per_tonne,
+    get_fuel_emission_profile,
+    list_all_emission_profiles,
 )
 from src.analysis.decision_support import compute_carbon_intensity_rating
 
@@ -413,6 +415,9 @@ def predict_fuel(
     emiss_co2e_t = emiss_dict["total_co2e"]
     ttw_co2e_t = emiss_dict["tank_to_wake"]
     wtt_co2e_t = emiss_dict["well_to_tank"]
+    slip_co2e_t = emiss_dict.get("slip", 0.0)
+    pathway_used = emiss_dict.get("pathway_used", pathway or "default")
+    profile_meta = emiss_dict.get("profile", {})
 
     # 4. Voyage Cost calculation
     bunker_cost = primary_fuel * fuel_price
@@ -499,8 +504,17 @@ def predict_fuel(
             "total_co2e_tonnes": round(emiss_co2e_t, 2),
             "tank_to_wake_tonnes": round(ttw_co2e_t, 2),
             "well_to_tank_tonnes": round(wtt_co2e_t, 2),
+            "slip_co2e_tonnes": round(slip_co2e_t, 2),
+            "pathway_used": pathway_used,
             "carbon_intensity_g_tnm": round(ci_g_tnm, 2),
             "carbon_intensity_rating": ci_info,
+            "emission_profile": profile_meta,
+            "emission_breakdown_tree": {
+                "lifecycle_co2e_tonnes": round(emiss_co2e_t, 2),
+                "well_to_tank_tonnes": round(wtt_co2e_t, 2),
+                "tank_to_wake_tonnes": round(ttw_co2e_t, 2),
+                "methane_slip_tonnes": round(slip_co2e_t, 2),
+            },
         },
         "model_validation": {
             "model_name": selected_ml_name,
@@ -536,6 +550,19 @@ def get_alternative_fuels(
         "records": df.to_dict(orient="records"),
         "structured_parameters": FUEL_STRUCTURED_PARAMETERS,
         "vessel_compatibility": VESSEL_FUEL_COMPATIBILITY,
+        "emission_profiles": [p.to_dict() for p in list_all_emission_profiles(cfg)],
+    })
+
+@app.get("/api/emission-profiles")
+def get_emission_profiles():
+    """Returns structured lifecycle emissions factors and scientific sources for all marine fuels and pathways."""
+    cfg = load_config()
+    profiles = [p.to_dict() for p in list_all_emission_profiles(cfg)]
+    return clean_json({
+        "profiles": profiles,
+        "framework": "IMO MEPC / GREET Well-to-Wake Lifecycle GHG Accounting",
+        "formula": "Lifecycle CO2e = Well-to-Tank (WtT) + Tank-to-Wake (TtW) + Methane/Fuel Slip",
+        "disclaimer": "Scientific values preserved from official regulatory studies (IMO MEPC, ICCT, GREET). Unverified entries labeled as 'Illustrative project assumptions'.",
     })
 
 @app.get("/api/shore-power")

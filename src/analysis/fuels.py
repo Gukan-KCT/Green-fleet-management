@@ -26,6 +26,9 @@ from src.models.physics import (
     calculate_emissions,
     get_fuel_price_usd_per_tonne,
     calculate_usable_capacity_teu,
+    FuelEmissionProfile,
+    get_fuel_emission_profile,
+    list_all_emission_profiles,
 )
 
 
@@ -435,6 +438,10 @@ def compare_fuels_for_voyage(
                 "availability_assumption": meta.get("availability_assumption", "N/A"),
                 "operational_constraints": meta.get("operational_constraints", []),
                 "assumption_labels": meta.get("assumptions", {}),
+                "emission_profile": emiss.get("profile", {}),
+                "emission_source": emiss.get("source", "Project assumption"),
+                "emission_source_year": emiss.get("source_year", 2023),
+                "emission_assumption_flag": emiss.get("assumption_flag", "Illustrative project assumptions"),
             }
         )
 

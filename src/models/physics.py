@@ -28,9 +28,307 @@ Formulas implemented:
 
 from __future__ import annotations
 import math
+from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import yaml
+
+
+@dataclass
+class FuelEmissionProfile:
+    """
+    Structured lifecycle greenhouse gas (GHG) emission profile for maritime fuels.
+    
+    All emission factors are expressed in tonnes of CO2-equivalent per tonne of fuel (t CO2e / t fuel).
+    
+    Emissions accounting follows the Well-to-Wake (WtW) lifecycle framework:
+      Lifecycle GHG = Well-to-Tank (WtT) + Tank-to-Wake (TtW) + Fuel/Methane Slip
+    """
+    fuel: str
+    fuel_name: str
+    pathway: str
+    wtt_factor: float          # Well-to-Tank (upstream extraction, processing, transport) [t CO2e/t]
+    ttw_factor: float          # Tank-to-Wake (onboard combustion / tailpipe emissions) [t CO2e/t]
+    slip_factor: float         # Unburned hydrocarbon / methane slip or N2O penalty [t CO2e/t]
+    lifecycle_factor: float    # Total Well-to-Wake factor (wtt + ttw + slip) [t CO2e/t]
+    source: str                # Scientific / regulatory literature source
+    source_year: int           # Year of source publication
+    assumption_flag: str       # "Real / Publicly Sourced", "Project Assumption", or "Illustrative project assumptions"
+    notes: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert profile to serializable dictionary."""
+        return asdict(self)
+
+
+# Documented Provenance Catalog for Supported Fuels
+FUEL_EMISSION_PROFILES_CATALOG: Dict[str, Dict[str, Dict[str, Any]]] = {
+    "HFO": {
+        "fossil": {
+            "fuel": "HFO",
+            "fuel_name": "Heavy Fuel Oil (HFO)",
+            "pathway": "fossil",
+            "wtt_factor": 0.58,
+            "ttw_factor": 3.114,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 3.694,
+            "source": "IMO MEPC.308(73) & MEPC 80 LCA Guidelines / ISO 8217",
+            "source_year": 2023,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Standard maritime residual fuel baseline with refinery upstream and marine diesel engine combustion.",
+        }
+    },
+    "MGO": {
+        "fossil": {
+            "fuel": "MGO",
+            "fuel_name": "Marine Gas Oil (MGO)",
+            "pathway": "fossil",
+            "wtt_factor": 0.65,
+            "ttw_factor": 3.206,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 3.856,
+            "source": "IMO MEPC.308(73) & MEPC 80 LCA Guidelines",
+            "source_year": 2023,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Low-sulfur distillate bunker fuel with universal global bunkering availability.",
+        }
+    },
+    "LNG": {
+        "fossil": {
+            "fuel": "LNG",
+            "fuel_name": "Liquefied Natural Gas (LNG)",
+            "pathway": "fossil",
+            "wtt_factor": 0.82,
+            "ttw_factor": 2.750,
+            "slip_factor": 0.15,
+            "lifecycle_factor": 3.720,
+            "source": "ICCT Marine LNG Life-Cycle Analysis & IMO 4th GHG Study",
+            "source_year": 2020,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Includes 0.15 t CO2e/t methane slip (CH4 GWP-100 proxy) representing 4-stroke low-pressure dual-fuel auxiliary/propulsion engines.",
+        }
+    },
+    "Methanol": {
+        "green": {
+            "fuel": "Methanol",
+            "fuel_name": "Methanol (CH3OH)",
+            "pathway": "green",
+            "wtt_factor": 0.15,
+            "ttw_factor": 1.375,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 1.525,
+            "source": "GREET Model & IMO MEPC.1/Circ.877 (Biogenic/Renewable E-Methanol)",
+            "source_year": 2023,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Renewable e-methanol produced from green hydrogen and biogenic CO2. TtW reflects carbon in CH3OH molecule.",
+        },
+        "blue": {
+            "fuel": "Methanol",
+            "fuel_name": "Methanol (CH3OH)",
+            "pathway": "blue",
+            "wtt_factor": 0.85,
+            "ttw_factor": 1.375,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 2.225,
+            "source": "IEA Maritime Fuel Report & DNV Alternative Fuels Insight",
+            "source_year": 2023,
+            "assumption_flag": "Project Assumption",
+            "notes": "Natural gas steam reforming with 90% Carbon Capture & Storage (CCS).",
+        },
+        "grey": {
+            "fuel": "Methanol",
+            "fuel_name": "Methanol (CH3OH)",
+            "pathway": "grey",
+            "wtt_factor": 2.10,
+            "ttw_factor": 1.375,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 3.475,
+            "source": "GREET / IMO LCA Correspondence Group",
+            "source_year": 2022,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Unabated fossil natural gas reforming without carbon capture.",
+        },
+    },
+    "Ammonia": {
+        "green": {
+            "fuel": "Ammonia",
+            "fuel_name": "Ammonia (NH3)",
+            "pathway": "green",
+            "wtt_factor": 0.10,
+            "ttw_factor": 0.0,
+            "slip_factor": 0.18,
+            "lifecycle_factor": 0.280,
+            "source": "IMO LCA Correspondence Group & Ammonia Energy Association",
+            "source_year": 2023,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Electrolytic green hydrogen Haber-Bosch. Zero tailpipe carbon; includes 0.18 t CO2e/t N2O combustion slip penalty.",
+        },
+        "blue": {
+            "fuel": "Ammonia",
+            "fuel_name": "Ammonia (NH3)",
+            "pathway": "blue",
+            "wtt_factor": 0.95,
+            "ttw_factor": 0.0,
+            "slip_factor": 0.18,
+            "lifecycle_factor": 1.130,
+            "source": "Hydrogen Council / IRENA Future Fuel Outlook",
+            "source_year": 2023,
+            "assumption_flag": "Project Assumption",
+            "notes": "Fossil methane reforming with CCS Haber-Bosch synthesis.",
+        },
+        "grey": {
+            "fuel": "Ammonia",
+            "fuel_name": "Ammonia (NH3)",
+            "pathway": "grey",
+            "wtt_factor": 2.60,
+            "ttw_factor": 0.0,
+            "slip_factor": 0.18,
+            "lifecycle_factor": 2.780,
+            "source": "GREET / IEA Ammonia Technology Roadmap",
+            "source_year": 2022,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Conventional unabated Haber-Bosch from natural gas or coal.",
+        },
+    },
+    "Hydrogen": {
+        "green": {
+            "fuel": "Hydrogen",
+            "fuel_name": "Liquid Hydrogen (LH2)",
+            "pathway": "green",
+            "wtt_factor": 0.50,
+            "ttw_factor": 0.0,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 0.50,
+            "source": "EU RED II / JRC Well-to-Wheels & ISO 14687",
+            "source_year": 2023,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Electrolysis from renewable power plus cryogenic liquefaction (-253°C). Zero tailpipe emissions.",
+        },
+        "blue": {
+            "fuel": "Hydrogen",
+            "fuel_name": "Liquid Hydrogen (LH2)",
+            "pathway": "blue",
+            "wtt_factor": 3.20,
+            "ttw_factor": 0.0,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 3.20,
+            "source": "Clean Hydrogen Partnership / IEA 2023",
+            "source_year": 2023,
+            "assumption_flag": "Project Assumption",
+            "notes": "Steam Methane Reforming (SMR) with CCS + cryogenic liquefaction.",
+        },
+        "grey": {
+            "fuel": "Hydrogen",
+            "fuel_name": "Liquid Hydrogen (LH2)",
+            "pathway": "grey",
+            "wtt_factor": 11.50,
+            "ttw_factor": 0.0,
+            "slip_factor": 0.0,
+            "lifecycle_factor": 11.50,
+            "source": "EU JRC / US DOE Hydrogen Life Cycle Analysis",
+            "source_year": 2022,
+            "assumption_flag": "Real / Publicly Sourced",
+            "notes": "Unabated SMR of fossil gas + liquefaction energy penalty.",
+        },
+    },
+}
+
+
+def get_fuel_emission_profile(
+    fuel_type: str,
+    pathway: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> FuelEmissionProfile:
+    """
+    Retrieve structured FuelEmissionProfile for any supported marine fuel and production pathway.
+    
+    If the fuel/pathway is present in FUEL_EMISSION_PROFILES_CATALOG, it returns the verified scientific
+    or project assumption record. If not documented, it falls back to config parameters labeled as
+    'Illustrative project assumptions'.
+    """
+    cfg = config or load_config()
+    fuel_key = fuel_type.strip() if isinstance(fuel_type, str) else "HFO"
+    if fuel_key not in cfg.get("fuels", {}):
+        fuel_key = "HFO"
+
+    fuel_cfg = cfg["fuels"][fuel_key]
+    default_pw = fuel_cfg.get("default_pathway", "default")
+    pw = pathway or default_pw
+
+    # Normalize pathway
+    if pw == "default":
+        pw = default_pw
+
+    # Check verified catalog first
+    if fuel_key in FUEL_EMISSION_PROFILES_CATALOG:
+        pw_dict = FUEL_EMISSION_PROFILES_CATALOG[fuel_key]
+        if pw in pw_dict:
+            rec = pw_dict[pw]
+            return FuelEmissionProfile(
+                fuel=rec["fuel"],
+                fuel_name=rec["fuel_name"],
+                pathway=rec["pathway"],
+                wtt_factor=float(rec["wtt_factor"]),
+                ttw_factor=float(rec["ttw_factor"]),
+                slip_factor=float(rec["slip_factor"]),
+                lifecycle_factor=float(rec["lifecycle_factor"]),
+                source=rec["source"],
+                source_year=rec["source_year"],
+                assumption_flag=rec["assumption_flag"],
+                notes=rec.get("notes", ""),
+            )
+        elif "fossil" in pw_dict:
+            rec = pw_dict["fossil"]
+            return FuelEmissionProfile(
+                fuel=rec["fuel"],
+                fuel_name=rec["fuel_name"],
+                pathway=rec["pathway"],
+                wtt_factor=float(rec["wtt_factor"]),
+                ttw_factor=float(rec["ttw_factor"]),
+                slip_factor=float(rec["slip_factor"]),
+                lifecycle_factor=float(rec["lifecycle_factor"]),
+                source=rec["source"],
+                source_year=rec["source_year"],
+                assumption_flag=rec["assumption_flag"],
+                notes=rec.get("notes", ""),
+            )
+
+    # Fallback to config values and label as Illustrative project assumptions
+    ef_ttw = float(fuel_cfg.get("ef_tank_to_wake", 0.0))
+    wt_t_spec = fuel_cfg.get("ef_well_to_tank", {})
+    if isinstance(wt_t_spec, dict):
+        ef_wtt = float(wt_t_spec.get(pw, wt_t_spec.get("default", 0.58)))
+    else:
+        ef_wtt = float(wt_t_spec)
+
+    slip = float(fuel_cfg.get("slip_factor_co2e_per_tonne", 0.0))
+    total = ef_ttw + ef_wtt + slip
+
+    return FuelEmissionProfile(
+        fuel=fuel_key,
+        fuel_name=fuel_cfg.get("name", fuel_key),
+        pathway=pw,
+        wtt_factor=ef_wtt,
+        ttw_factor=ef_ttw,
+        slip_factor=slip,
+        lifecycle_factor=total,
+        source="System Configuration (config/params.yaml)",
+        source_year=2024,
+        assumption_flag="Illustrative project assumptions",
+        notes="Configured fallback parameter set without external source confirmation.",
+    )
+
+
+def list_all_emission_profiles(config: Optional[Dict[str, Any]] = None) -> List[FuelEmissionProfile]:
+    """Return all configured and supported FuelEmissionProfiles across fuels and pathways."""
+    cfg = config or load_config()
+    profiles: List[FuelEmissionProfile] = []
+    for f_key in cfg.get("fuels", {}):
+        f_info = cfg["fuels"][f_key]
+        pathways = f_info.get("pathways", [f_info.get("default_pathway", "default")])
+        for pw in pathways:
+            profiles.append(get_fuel_emission_profile(f_key, pw, cfg))
+    return profiles
 
 
 def load_config(config_path: str | Path = "config/params.yaml") -> Dict[str, Any]:
@@ -147,36 +445,24 @@ def calculate_emissions(
     fuel_type: str,
     pathway: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """
     Calculate lifecycle GHG emissions (tonnes CO2e) separated into:
-    - Tank-to-Wake (combustion/tailpipe)
+    - Tank-to-Wake (combustion/tailpipe emissions)
     - Well-to-Tank (upstream extraction, production, transport)
-    - Fuel Slip (e.g. unburned methane slip for LNG, N2O for ammonia)
-    - Total Well-to-Wake (TtW + WtT + Slip)
+    - Methane / Fuel Slip (unburned slip e.g. for LNG and N2O for Ammonia)
+    - Total Well-to-Wake (WtT + TtW + Slip)
+
+    Returns dictionary with exact breakdown and attached FuelEmissionProfile metadata.
     """
     if config is None:
         config = load_config()
 
-    fuel_cfg = config["fuels"][fuel_type]
+    profile = get_fuel_emission_profile(fuel_type, pathway, config)
 
-    # Tank-to-Wake emission factor
-    ef_ttw = float(fuel_cfg.get("ef_tank_to_wake", 0.0))
-
-    # Well-to-Tank emission factor by pathway
-    wt_t_spec = fuel_cfg.get("ef_well_to_tank", {})
-    if isinstance(wt_t_spec, dict):
-        selected_pathway = pathway or fuel_cfg.get("default_pathway", "default")
-        ef_wtt = float(wt_t_spec.get(selected_pathway, wt_t_spec.get("default", 0.0)))
-    else:
-        ef_wtt = float(wt_t_spec)
-
-    # Slip factor
-    slip_factor = float(fuel_cfg.get("slip_factor_co2e_per_tonne", 0.0))
-
-    ttw_emissions = fuel_mass_tonnes * ef_ttw
-    wtt_emissions = fuel_mass_tonnes * ef_wtt
-    slip_emissions = fuel_mass_tonnes * slip_factor
+    ttw_emissions = fuel_mass_tonnes * profile.ttw_factor
+    wtt_emissions = fuel_mass_tonnes * profile.wtt_factor
+    slip_emissions = fuel_mass_tonnes * profile.slip_factor
     total_co2e = ttw_emissions + wtt_emissions + slip_emissions
 
     return {
@@ -184,7 +470,18 @@ def calculate_emissions(
         "well_to_tank": wtt_emissions,
         "slip": slip_emissions,
         "total_co2e": total_co2e,
-        "pathway_used": pathway or fuel_cfg.get("default_pathway", "default"),
+        "pathway_used": profile.pathway,
+        "fuel": profile.fuel,
+        "fuel_name": profile.fuel_name,
+        "wtt_factor": profile.wtt_factor,
+        "ttw_factor": profile.ttw_factor,
+        "slip_factor": profile.slip_factor,
+        "lifecycle_factor": profile.lifecycle_factor,
+        "source": profile.source,
+        "source_year": profile.source_year,
+        "assumption_flag": profile.assumption_flag,
+        "notes": profile.notes,
+        "profile": profile.to_dict(),
     }
 
 

@@ -191,30 +191,38 @@ def build_allocation_stacked_bar(df_routes: pd.DataFrame) -> go.Figure:
 
 def build_emissions_breakdown_chart(eval_res: Dict[str, Any]) -> go.Figure:
     """
-    Renders Well-to-Wake emissions breakdown across Tank-to-Wake, Well-to-Tank, and Port Berth.
+    Renders Well-to-Wake emissions breakdown across Tank-to-Wake, Well-to-Tank, Methane Slip, and Port Berth.
     """
     emiss = eval_res.get("emissions_breakdown", {})
     ttw = float(emiss.get("ttw_co2e_tonnes", 0.0))
     wtt = float(emiss.get("wtt_co2e_tonnes", 0.0))
+    slip = float(emiss.get("slip_co2e_tonnes", 0.0))
     berth = float(emiss.get("berth_co2e_tonnes", 0.0))
 
-    if ttw == 0.0 and wtt == 0.0 and berth == 0.0:
+    if ttw == 0.0 and wtt == 0.0 and slip == 0.0 and berth == 0.0:
         details = eval_res.get("route_details", {})
         for d in details.values():
             ttw += float(d.get("voyage_ttw_emissions_t", 0.0))
             wtt += float(d.get("voyage_wtt_emissions_t", 0.0))
+            slip += float(d.get("slip_emissions_t", 0.0))
             berth += float(d.get("berth_emissions_t", 0.0))
 
-    if ttw == 0.0 and wtt == 0.0 and berth == 0.0:
+    if ttw == 0.0 and wtt == 0.0 and slip == 0.0 and berth == 0.0:
         tot = float(eval_res.get("total_emissions_co2e_tonnes", 0.0))
         if tot > 0:
-            ttw = tot * 0.74
+            ttw = tot * 0.72
             wtt = tot * 0.21
+            slip = tot * 0.02
             berth = tot * 0.05
 
-    categories = ["Tank-to-Wake (Combustion)", "Well-to-Tank (Upstream)", "Port Berth (Aux/Shore)"]
-    values = [ttw, wtt, berth]
-    colors = ["#0f4c81", "#0d9488", "#d97706"]
+    categories = [
+        "Well-to-Tank (Upstream)",
+        "Tank-to-Wake (Combustion)",
+        "Methane / Fuel Slip",
+        "Port Berth (Aux/Shore)",
+    ]
+    values = [wtt, ttw, slip, berth]
+    colors = ["#0d9488", "#0f4c81", "#b45309", "#d97706"]
 
     fig = go.Figure(
         go.Bar(
