@@ -7,6 +7,8 @@
   <title>Green Fleet | Maritime Logistics & Decarbonization Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.plot.ly" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.plot.ly">
   <style>
 /* ===================================================================
    Green Fleet — Modern Single-Page Application Design System
@@ -1580,16 +1582,25 @@ navItems.forEach(item => {
       viewSubtitle.textContent = pageMeta[targetPage].sub;
     }
 
-    // Trigger initial load for pages
-    if (targetPage === 'network') loadNetwork();
-    if (targetPage === 'predictor') loadPredictor();
-    if (targetPage === 'fuels') loadFuels();
-    if (targetPage === 'shore') loadShorePower();
-    if (targetPage === 'scenarios') loadScenarios();
-    if (targetPage === 'benchmark') loadBenchmark();
-    if (targetPage === 'casestudy') loadCaseStudy();
+    // Trigger initial load for pages only once, or resize charts on revisits
+    if (!loadedPages[targetPage]) {
+      if (targetPage === 'network') loadNetwork();
+      if (targetPage === 'predictor') loadPredictor();
+      if (targetPage === 'fuels') loadFuels();
+      if (targetPage === 'shore') loadShorePower();
+      if (targetPage === 'scenarios') loadScenarios();
+      if (targetPage === 'benchmark') loadBenchmark();
+      if (targetPage === 'casestudy') loadCaseStudy();
+      loadedPages[targetPage] = true;
+    } else {
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
+    }
   });
 });
+
+const loadedPages = { planner: true };
 
 // Formatters
 const fmtNum = (n) => (n != null ? Math.round(n).toLocaleString() : '-');
@@ -2763,7 +2774,17 @@ document.querySelectorAll('.tab-container').forEach(container => {
 
 // Initial Load
 fetchPlannerData();
-loadNetwork();
+
+// Defer non-critical network background loading until after primary view is interactive
+if ('requestIdleCallback' in window) {
+  requestIdleCallback(() => {
+    loadNetwork();
+  });
+} else {
+  setTimeout(() => {
+    loadNetwork();
+  }, 200);
+}
 
 </script>
 </body>

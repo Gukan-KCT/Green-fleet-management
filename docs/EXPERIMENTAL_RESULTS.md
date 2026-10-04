@@ -3,8 +3,8 @@
 > **DISCLAIMER:** All figures, operational costs, fuel consumptions, and lifecycle emissions in this dossier are derived from **strictly synthetic models** formulated for the Phase-1 prototype demonstration. No proprietary vessel telemetry or real commercial operations were utilized.
 
 **Execution Status:** Full Reproducible Batch Run Completed  
-**Code & Config Hash:** `e2394c9e4c280115`  
-**Total Benchmark Runtime:** 4066.84 seconds  
+**Code & Config Hash:** `081ed2e25e09d6ac`  
+**Total Benchmark Runtime:** 3775.65 seconds  
 **Hardware Profile:** Local Classical CPU (No Quantum Hardware, No Qiskit, No Emulators)  
 **Cross-Validation:** Repeated 10-Fold CV (20 Paired Folds) with Two-Sided Wilcoxon Signed-Rank Test  
 **Optimization Budget:** 20,000 Function Evaluations per Algorithm across 10 Independent Seeds  
@@ -42,11 +42,11 @@ Benchmarking of 5 optimization algorithms on the 5-route feeder network problem 
 
 | Algorithm               |   Best Fitness |   Mean Fitness |   Std Fitness |   Feasibility Rate (%) |   Avg Runtime (s) |   Avg Evaluations |
 |:------------------------|---------------:|---------------:|--------------:|-----------------------:|------------------:|------------------:|
-| Genetic Algorithm (GA)  |         3.2702 |         3.5278 |        0.1908 |                    100 |             9.715 |             20000 |
-| QIEA (Quantum-Inspired) |         3.7067 |         4.3046 |        0.4344 |                    100 |            14.653 |             20000 |
-| Particle Swarm (PSO)    |         7.3804 |     15475.7    |    10831.8    |                     20 |            11.366 |             20000 |
-| Hill-Climb Search       |         3.5463 |         3.7659 |        0.1275 |                    100 |             8.847 |             20000 |
-| Random Search           |    215684      |    265558      |    26149.5    |                      0 |            16.145 |             20000 |
+| Genetic Algorithm (GA)  |         3.2702 |         3.5278 |        0.1908 |                    100 |             8.204 |             20000 |
+| QIEA (Quantum-Inspired) |         3.7067 |         4.3046 |        0.4344 |                    100 |             6.219 |             20000 |
+| Particle Swarm (PSO)    |         7.3804 |     15475.7    |    10831.8    |                     20 |             4.778 |             20000 |
+| Hill-Climb Search       |         3.5463 |         3.7659 |        0.1275 |                    100 |             6.307 |             20000 |
+| Random Search           |    215684      |    265558      |    26149.5    |                      0 |            13.443 |             20000 |
 
 ### 2.2 Data-Driven Algorithmic Narrative
 
@@ -58,9 +58,9 @@ Benchmarking of 5 optimization algorithms on the 5-route feeder network problem 
 
 - **Genetic Algorithm (GA)**: Mean fitness = 3.5278, Feasibility = 100.0%. Canonical two-point crossover and bit-flip mutation effectively assemble building blocks across route assignments.
 
-- **Hill-Climb Search**: Mean fitness = 3.7659, Feasibility = 100.0%, Runtime = 8.85s (20,000 evals). Multi-start 1-bit-flip neighborhood search greedily climbs local gradients with random perturbation restarts.
+- **Hill-Climb Search**: Mean fitness = 3.7659, Feasibility = 100.0%, Runtime = 6.31s (20,000 evals). Multi-start 1-bit-flip neighborhood search greedily climbs local gradients with random perturbation restarts.
 
-- **QIEA (Quantum-Inspired)**: Mean fitness = 4.3046, Feasibility = 100.0%, Runtime = 14.65s (20,000 evals). Probabilistic Q-bit representation and dynamic rotation angle updates provide rapid exploration with low memory footprint.
+- **QIEA (Quantum-Inspired)**: Mean fitness = 4.3046, Feasibility = 100.0%, Runtime = 6.22s (20,000 evals). Probabilistic Q-bit representation and dynamic rotation angle updates provide rapid exploration with low memory footprint.
 
 - **Particle Swarm (PSO)**: Mean fitness = 15475.6595, Feasibility = 20.0%. With dynamic inertia weight decay (0.9 -> 0.4) and velocity clipping, binary PSO explores discrete hyperplanes.
 
@@ -74,21 +74,21 @@ Evaluated across Small ($L=39$ bits), Medium ($L=101$ bits), and Large ($L=462$ 
 
 | Scale                        |   Decision Bits (L) |   Evaluations | Algorithm               |     Best Fitness |     Mean Fitness |   Feasibility Rate (%) |   Avg Runtime (s) |
 |:-----------------------------|--------------------:|--------------:|:------------------------|-----------------:|-----------------:|-----------------------:|------------------:|
-| Small (3 Routes, 4 Options)  |                  39 |          8000 | Genetic Algorithm (GA)  |      1.6372      |      1.7502      |                    100 |             1.724 |
-| Small (3 Routes, 4 Options)  |                  39 |          8000 | QIEA (Quantum-Inspired) |      1.8197      |      2.0067      |                    100 |             1.321 |
-| Small (3 Routes, 4 Options)  |                  39 |          8000 | Particle Swarm (PSO)    |      1.8524      |    295.902       |                     80 |             0.818 |
-| Small (3 Routes, 4 Options)  |                  39 |          8000 | Hill-Climb Search       |      1.6874      |      1.7906      |                    100 |             0.822 |
-| Small (3 Routes, 4 Options)  |                  39 |          8000 | Random Search           |      1.9793      |  14048.2         |                     10 |             1.261 |
-| Medium (5 Routes, 8 Options) |                 101 |         20000 | Genetic Algorithm (GA)  |      3.2702      |      3.5278      |                    100 |             4.287 |
-| Medium (5 Routes, 8 Options) |                 101 |         20000 | QIEA (Quantum-Inspired) |      3.7067      |      4.3046      |                    100 |            11.809 |
-| Medium (5 Routes, 8 Options) |                 101 |         20000 | Particle Swarm (PSO)    |      7.3804      |  15475.7         |                     20 |             9.253 |
-| Medium (5 Routes, 8 Options) |                 101 |         20000 | Hill-Climb Search       |      3.5463      |      3.7659      |                    100 |             6.919 |
-| Medium (5 Routes, 8 Options) |                 101 |         20000 | Random Search           | 215684           | 265558           |                      0 |            15.933 |
-| Large (24 Routes, 8 Options) |                 462 |         30000 | Genetic Algorithm (GA)  |     19.2194      |   8277.09        |                     50 |            47.749 |
-| Large (24 Routes, 8 Options) |                 462 |         30000 | QIEA (Quantum-Inspired) |  20491.1         |  39243.8         |                      0 |            43.195 |
-| Large (24 Routes, 8 Options) |                 462 |         30000 | Particle Swarm (PSO)    | 546151           | 866507           |                      0 |            60.645 |
-| Large (24 Routes, 8 Options) |                 462 |         30000 | Hill-Climb Search       |   6688.45        |  25936.5         |                      0 |            23.661 |
-| Large (24 Routes, 8 Options) |                 462 |         30000 | Random Search           |      1.97363e+06 |      2.03678e+06 |                      0 |            88.789 |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | Genetic Algorithm (GA)  |      1.6372      |      1.7502      |                    100 |             1.572 |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | QIEA (Quantum-Inspired) |      1.8197      |      2.0067      |                    100 |             3.464 |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | Particle Swarm (PSO)    |      1.8524      |    295.902       |                     80 |             1.652 |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | Hill-Climb Search       |      1.6874      |      1.7906      |                    100 |             0.813 |
+| Small (3 Routes, 4 Options)  |                  39 |          8000 | Random Search           |      1.9793      |  14048.2         |                     10 |             2.117 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | Genetic Algorithm (GA)  |      3.2702      |      3.5278      |                    100 |             6.894 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | QIEA (Quantum-Inspired) |      3.7067      |      4.3046      |                    100 |            10.563 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | Particle Swarm (PSO)    |      7.3804      |  15475.7         |                     20 |             4.668 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | Hill-Climb Search       |      3.5463      |      3.7659      |                    100 |             3.447 |
+| Medium (5 Routes, 8 Options) |                 101 |         20000 | Random Search           | 215684           | 265558           |                      0 |            14.019 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | Genetic Algorithm (GA)  |     19.2194      |   8277.09        |                     50 |            31.225 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | QIEA (Quantum-Inspired) |  20491.1         |  39243.8         |                      0 |            50.616 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | Particle Swarm (PSO)    | 546151           | 866507           |                      0 |            65.112 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | Hill-Climb Search       |   6688.45        |  25936.5         |                      0 |            33.565 |
+| Large (24 Routes, 8 Options) |                 462 |         30000 | Random Search           |      1.97363e+06 |      2.03678e+06 |                      0 |            89.496 |
 
 ---
 

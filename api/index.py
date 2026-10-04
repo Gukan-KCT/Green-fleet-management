@@ -144,7 +144,7 @@ def get_ports_catalog():
     return clean_json({
         "catalog": catalog,
         "catalog_ports": catalog,
-        "demo_network": demo_net.model_dump(),
+        "demo_network": demo_net.to_dict(),
     })
 
 @app.get("/api/calculate-distance")
@@ -339,6 +339,9 @@ def get_shore_power():
 @app.get("/api/scenarios")
 def get_scenarios():
     """Runs or returns precomputed policy & climate stress testing scenarios."""
+    saved = load_pkl("saved_scenarios.pkl")
+    if saved:
+        return clean_json(saved)
     cfg = load_config()
     summary_df, details_map = run_all_preset_scenarios(config=cfg)
     return clean_json(details_map)
