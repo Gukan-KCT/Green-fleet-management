@@ -337,6 +337,10 @@ class FleetOptimizationProblem:
                 constraint_violations["vessel_availability"] += float(used_count - avail)
 
         # Route-by-route evaluations
+        total_ttw_emissions = 0.0
+        total_wtt_emissions = 0.0
+        total_slip_emissions = 0.0
+        total_berth_emissions = 0.0
         route_details = {}
 
         for r_idx, r_key in enumerate(self.route_keys):
@@ -362,6 +366,10 @@ class FleetOptimizationProblem:
             route_annual_trips = 0.0
             route_reliabilities = []
             route_assigned_vessels = 0
+            route_ttw_emiss = 0.0
+            route_wtt_emiss = 0.0
+            route_slip_emiss = 0.0
+            route_berth_emiss = 0.0
 
             for o_idx, opt in enumerate(self.options):
                 n_vessels = allocations[o_idx, r_idx]
@@ -416,6 +424,13 @@ class FleetOptimizationProblem:
                 # Emissions from propulsion
                 prop_emissions = calculate_emissions(ann_fuel_tonnes, fuel_type, pathway, self.config)
                 total_emissions_co2e += prop_emissions["total_co2e"]
+                total_ttw_emissions += prop_emissions["tank_to_wake"]
+                total_wtt_emissions += prop_emissions["well_to_tank"]
+                total_slip_emissions += prop_emissions.get("slip", 0.0)
+
+                route_ttw_emiss += prop_emissions["tank_to_wake"]
+                route_wtt_emiss += prop_emissions["well_to_tank"]
+                route_slip_emiss += prop_emissions.get("slip", 0.0)
 
                 # Economic costs
                 # 1. Fuel cost
@@ -443,6 +458,9 @@ class FleetOptimizationProblem:
                 ann_berth_emissions = ann_trips * (berth_orig["emissions_co2e"] + berth_dest["emissions_co2e"])
 
                 total_emissions_co2e += ann_berth_emissions
+                total_berth_emissions += ann_berth_emissions
+                route_berth_emiss += ann_berth_emissions
+
                 total_operating_cost += ann_fuel_cost + ann_charter_cost + ann_port_fees + ann_berth_cost
 
                 # Reliability
@@ -504,6 +522,10 @@ class FleetOptimizationProblem:
                 "min_sailings_per_week": min_freq,
                 "reliability": avg_rel,
                 "transport_work_tnm": route_transport_work,
+                "voyage_ttw_emissions_t": route_ttw_emiss,
+                "voyage_wtt_emissions_t": route_wtt_emiss,
+                "berth_emissions_t": route_berth_emiss,
+                "slip_emissions_t": route_slip_emiss,
             }
 
         # Carbon tax addition to operating cost
@@ -552,6 +574,13 @@ class FleetOptimizationProblem:
             "shore_power": shore_power,
             "route_details": route_details,
             "vessels_used_by_type": vessels_used_by_type,
+            "emissions_breakdown": {
+                "ttw_co2e_tonnes": float(total_ttw_emissions),
+                "wtt_co2e_tonnes": float(total_wtt_emissions),
+                "slip_co2e_tonnes": float(total_slip_emissions),
+                "berth_co2e_tonnes": float(total_berth_emissions),
+                "total_co2e_tonnes": float(total_emissions_co2e),
+            },
         }
 
     def fitness_function(self, bits: np.ndarray) -> float:

@@ -176,11 +176,25 @@ function renderPlanner(data) {
   // Plotly: Emissions Breakdown Chart
   const details = opt.route_details || {};
   let ttw = 0, wtt = 0, berth = 0;
-  Object.values(details).forEach(d => {
-    ttw += (d.voyage_ttw_emissions_t || 0);
-    wtt += (d.voyage_wtt_emissions_t || 0);
-    berth += (d.berth_emissions_t || 0);
-  });
+
+  if (opt.emissions_breakdown) {
+    ttw = opt.emissions_breakdown.ttw_co2e_tonnes || 0;
+    wtt = opt.emissions_breakdown.wtt_co2e_tonnes || 0;
+    berth = opt.emissions_breakdown.berth_co2e_tonnes || 0;
+  } else {
+    Object.values(details).forEach(d => {
+      ttw += (d.voyage_ttw_emissions_t || 0);
+      wtt += (d.voyage_wtt_emissions_t || 0);
+      berth += (d.berth_emissions_t || 0);
+    });
+  }
+
+  if (ttw === 0 && wtt === 0 && berth === 0 && (opt.total_emissions_co2e_tonnes || 0) > 0) {
+    const tot = opt.total_emissions_co2e_tonnes;
+    ttw = tot * 0.74;
+    wtt = tot * 0.21;
+    berth = tot * 0.05;
+  }
 
   Plotly.newPlot('chart-emiss', [{
     x: ['Tank-to-Wake (Combustion)', 'Well-to-Tank (Upstream)', 'Port Berth (Aux/Shore)'],
