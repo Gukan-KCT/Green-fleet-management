@@ -258,56 +258,257 @@ def get_plan(
         "is_precomputed": False,
     })
 
+from src.prediction.fuel_model import FuelModel
+from src.models.physics import (
+    calculate_alternative_fuel_mass,
+    calculate_emissions,
+    get_fuel_price_usd_per_tonne,
+)
+from src.analysis.decision_support import compute_carbon_intensity_rating
+
+# Preload ML predictor instances
+_prediction_cache: Optional[Dict[str, Any]] = None
+
+def get_prediction_cache() -> Optional[Dict[str, Any]]:
+    global _prediction_cache
+    if _prediction_cache is None:
+        _prediction_cache = load_pkl("saved_prediction_results.pkl")
+    return _prediction_cache
+
 @app.get("/api/predict-fuel")
 def predict_fuel(
     vessel: str = Query("handymax_feeder"),
-    speed: float = Query(14.0),
-    load_factor: float = Query(80.0),
-    weather: float = Query(0.3),
-    distance: float = Query(890.0),
-    fuel_price: float = Query(650.0),
-    carbon_tax: float = Query(50.0),
+    speed: float = Query(14.0, ge=1.0, le=40.0),
+    load_factor: float = Query(80.0, ge=0.0, le=100.0),
+    weather: float = Query(0.3, ge=0.0, le=1.0),
+    distance: float = Query(890.0, ge=1.0, le=25000.0),
+    fuel_type: str = Query("HFO"),
+    pathway: Optional[str] = Query("default"),
+    fuel_price: Optional[float] = Query(None, ge=0.0),
+    carbon_tax: Optional[float] = Query(None, ge=0.0),
+    model_choice: str = Query("Quantum-Inspired Predictor"),
+    mode: str = Query("both"),  # 'ml', 'physics', or 'both'
 ):
-    """Calculates instantaneous voyage fuel, cost, emissions, and ML regression comparison."""
+    """
+    Calculates operational fuel consumption, lifecycle emissions, voyage cost,
+    and carbon intensity comparing real trained ML models and naval physics.
+    """
+    # Safely unwrap default values if called directly as a Python function
+    from fastapi.params import Query as QueryParam
+    if isinstance(vessel, QueryParam): vessel = "handymax_feeder"
+    if isinstance(speed, QueryParam): speed = 14.0
+    if isinstance(load_factor, QueryParam): load_factor = 80.0
+    if isinstance(weather, QueryParam): weather = 0.3
+    if isinstance(distance, QueryParam): distance = 890.0
+    if isinstance(fuel_type, QueryParam): fuel_type = "HFO"
+    if isinstance(pathway, QueryParam): pathway = "default"
+    if isinstance(fuel_price, QueryParam): fuel_price = None
+    if isinstance(carbon_tax, QueryParam): carbon_tax = None
+    if isinstance(model_choice, QueryParam): model_choice = "Quantum-Inspired Predictor"
+    if isinstance(mode, QueryParam): mode = "both"
+
     cfg = load_config()
-    v_info = cfg["vessel_types"].get(vessel, cfg["vessel_types"]["handymax_feeder"])
-    cargo_load = (load_factor / 100.0) * float(v_info["l_ref_tonnes"])
-    
-    fuel_t, leg_days = calculate_leg_fuel_conventional(
+    vessel_keys = list(cfg["vessel_types"].keys())
+    if vessel not in cfg["vessel_types"]:
+        # Fallback to closest known or handymax
+        vessel = "handymax_feeder" if "handymax_feeder" in cfg["vessel_types"] else vessel_keys[0]
+
+    v_info = cfg["vessel_types"][vessel]
+    v_cap_dwt = float(v_info.get("capacity_dwt", v_info.get("l_ref_tonnes", 20000.0)))
+    cargo_load_tonnes = (max(0.0, min(100.0, float(load_factor))) / 100.0) * v_cap_dwt
+
+    # Validate fuel type
+    fuels_cfg = cfg.get("fuels", {})
+    if fuel_type not in fuels_cfg:
+        fuel_type = "HFO"
+
+    if carbon_tax is None:
+        carbon_tax = float(cfg.get("general", {}).get("carbon_price_usd_per_tonne", 80.0))
+    else:
+        carbon_tax = float(carbon_tax)
+
+    if fuel_price is None or float(fuel_price) <= 0:
+        fuel_price = get_fuel_price_usd_per_tonne(fuel_type, pathway, cfg)
+    else:
+        fuel_price = float(fuel_price)
+
+    speed = float(speed)
+    distance = float(distance)
+    weather = float(weather)
+
+
+    # 1. Physics baseline (tonnes conventional HFO)
+    phys_fuel_hfo, leg_days = calculate_leg_fuel_conventional(
         vessel_cfg=v_info,
         speed_knots=speed,
         distance_nm=distance,
-        cargo_load_tonnes=cargo_load,
+        cargo_load_tonnes=cargo_load_tonnes,
         weather_severity=weather,
     )
-    
-    cf_co2 = float(cfg["fuels"]["HFO"].get("cf_co2", 3.114))
-    emiss_t = fuel_t * cf_co2
-    fuel_cost = fuel_t * fuel_price
-    tax_cost = emiss_t * carbon_tax
-    total_cost = fuel_cost + tax_cost
-    
-    # Load ML metrics
-    pred_data = load_pkl("saved_prediction_results.pkl")
-    metrics = pred_data.get("metrics", {}) if pred_data else {}
-    
-    # Generate speed sweep curve
-    speeds = np.linspace(float(v_info["v_min_knots"]), float(v_info["v_max_knots"]), 15).tolist()
+
+    # Convert physics consumption if alternative fuel requested
+    if fuel_type != "HFO":
+        phys_fuel_tonnes = calculate_alternative_fuel_mass(phys_fuel_hfo, fuel_type, cfg)
+    else:
+        phys_fuel_tonnes = phys_fuel_hfo
+
+    # 2. Machine Learning Prediction using actual trained model
+    pred_data = get_prediction_cache()
+    ml_models = pred_data.get("trained_models", {}) if pred_data else {}
+    available_model_names = list(ml_models.keys())
+
+    selected_ml_name = model_choice if model_choice in ml_models else ("Quantum-Inspired Predictor" if "Quantum-Inspired Predictor" in ml_models else (available_model_names[0] if available_model_names else None))
+
+    ml_fuel_hfo = phys_fuel_hfo
+    ml_used = False
+    if selected_ml_name and selected_ml_name in ml_models:
+        try:
+            predictor_obj = ml_models[selected_ml_name]
+            f_model = FuelModel(
+                config=cfg,
+                trained_predictor=predictor_obj,
+                feature_names=pred_data.get("feature_names"),
+                model_name=selected_ml_name,
+            )
+            ml_fuel_hfo = f_model.predict(
+                vessel_type=vessel,
+                speed_knots=speed,
+                cargo_load_tonnes=cargo_load_tonnes,
+                distance_nm=distance,
+                weather_severity=weather,
+                mode="ml",
+            )
+            ml_used = True
+        except Exception:
+            ml_fuel_hfo = phys_fuel_hfo
+
+    if fuel_type != "HFO":
+        ml_fuel_tonnes = calculate_alternative_fuel_mass(ml_fuel_hfo, fuel_type, cfg)
+    else:
+        ml_fuel_tonnes = ml_fuel_hfo
+
+    # Primary predicted fuel according to selected mode
+    if mode == "physics":
+        primary_fuel = phys_fuel_tonnes
+        model_display = "Naval Hydrodynamics (Physics)"
+    elif mode == "ml" and ml_used:
+        primary_fuel = ml_fuel_tonnes
+        model_display = selected_ml_name
+    else:
+        # Default: ML prediction with physics comparison
+        primary_fuel = ml_fuel_tonnes if ml_used else phys_fuel_tonnes
+        model_display = selected_ml_name if ml_used else "Naval Hydrodynamics (Physics)"
+
+    diff_tonnes = ml_fuel_tonnes - phys_fuel_tonnes
+    diff_pct = ((ml_fuel_tonnes - phys_fuel_tonnes) / max(0.01, phys_fuel_tonnes)) * 100.0
+
+    # 3. Emissions calculation (Well-to-Wake CO2e)
+    emiss_dict = calculate_emissions(primary_fuel, fuel_type, pathway, cfg)
+    emiss_co2e_t = emiss_dict["total_co2e"]
+    ttw_co2e_t = emiss_dict["tank_to_wake"]
+    wtt_co2e_t = emiss_dict["well_to_tank"]
+
+    # 4. Voyage Cost calculation
+    bunker_cost = primary_fuel * fuel_price
+    tax_cost = emiss_co2e_t * carbon_tax
+    total_cost = bunker_cost + tax_cost
+
+    # 5. Carbon Intensity (g CO2e / tonne-nm)
+    t_nm = max(1.0, cargo_load_tonnes * distance)
+    ci_g_tnm = (emiss_co2e_t * 1e6) / t_nm
+    ci_info = compute_carbon_intensity_rating(ci_g_tnm)
+
+    # 6. Evaluation metrics for model
+    metrics_all = pred_data.get("metrics", {}) if pred_data else {}
+    selected_metrics = metrics_all.get(selected_ml_name, {})
+    # Strip any non-serializable objects
+    clean_metrics = {k: v for k, v in selected_metrics.items() if k != "model_obj"}
+
+    # 7. Speed Sweep Curve comparing ML vs Physics
+    v_min = float(v_info.get("v_min_knots", 10.0))
+    v_max = float(v_info.get("v_max_knots", 22.0))
+    speeds = np.linspace(v_min, v_max, 15).tolist()
     sweep = []
     for sp in speeds:
-        f_t, _ = calculate_leg_fuel_conventional(v_info, sp, distance, cargo_load, weather)
-        sweep.append({"speed": round(sp, 1), "fuel": round(f_t, 2)})
+        p_hfo, _ = calculate_leg_fuel_conventional(v_info, sp, distance, cargo_load_tonnes, weather)
+        p_val = calculate_alternative_fuel_mass(p_hfo, fuel_type, cfg) if fuel_type != "HFO" else p_hfo
+
+        m_val = p_val
+        if ml_used and selected_ml_name in ml_models:
+            try:
+                m_hfo = f_model.predict(
+                    vessel_type=vessel,
+                    speed_knots=sp,
+                    cargo_load_tonnes=cargo_load_tonnes,
+                    distance_nm=distance,
+                    weather_severity=weather,
+                    mode="ml",
+                )
+                m_val = calculate_alternative_fuel_mass(m_hfo, fuel_type, cfg) if fuel_type != "HFO" else m_hfo
+            except Exception:
+                m_val = p_val
+
+        sweep.append({
+            "speed": round(sp, 1),
+            "physics_fuel": round(p_val, 2),
+            "ml_fuel": round(m_val, 2),
+        })
 
     return clean_json({
-        "fuel_tonnes": round(fuel_t, 2),
-        "leg_days": round(leg_days, 2),
-        "emissions_co2e_t": round(emiss_t, 2),
-        "fuel_cost_usd": round(fuel_cost, 2),
-        "carbon_tax_usd": round(tax_cost, 2),
-        "total_cost_usd": round(total_cost, 2),
-        "ml_metrics": metrics,
+        "status": "success",
+        "inputs": {
+            "vessel": vessel,
+            "vessel_name": v_info.get("name", vessel),
+            "vessel_capacity_dwt": v_cap_dwt,
+            "cargo_tonnes": round(cargo_load_tonnes, 1),
+            "load_factor_pct": load_factor,
+            "speed_knots": speed,
+            "distance_nm": distance,
+            "weather_severity": weather,
+            "fuel_type": fuel_type,
+            "pathway": pathway,
+            "fuel_price_usd_t": fuel_price,
+            "carbon_tax_usd_t": carbon_tax,
+            "model_choice": selected_ml_name,
+            "mode": mode,
+        },
+        "prediction": {
+            "fuel_tonnes": round(primary_fuel, 2),
+            "model_used": model_display,
+            "is_ml": ml_used and mode != "physics",
+            "ml_prediction_tonnes": round(ml_fuel_tonnes, 2),
+            "physics_estimate_tonnes": round(phys_fuel_tonnes, 2),
+            "difference_tonnes": round(diff_tonnes, 2),
+            "difference_pct": round(diff_pct, 2),
+            "leg_days": round(leg_days, 2),
+        },
+        "economics": {
+            "fuel_cost_usd": round(bunker_cost, 2),
+            "carbon_tax_usd": round(tax_cost, 2),
+            "total_cost_usd": round(total_cost, 2),
+            "fuel_price_usd_per_tonne": round(fuel_price, 2),
+            "carbon_price_usd_per_tonne": round(carbon_tax, 2),
+        },
+        "emissions": {
+            "total_co2e_tonnes": round(emiss_co2e_t, 2),
+            "tank_to_wake_tonnes": round(ttw_co2e_t, 2),
+            "well_to_tank_tonnes": round(wtt_co2e_t, 2),
+            "carbon_intensity_g_tnm": round(ci_g_tnm, 2),
+            "carbon_intensity_rating": ci_info,
+        },
+        "model_validation": {
+            "model_name": selected_ml_name,
+            "mae": clean_metrics.get("mae"),
+            "rmse": clean_metrics.get("rmse"),
+            "r2": clean_metrics.get("r2"),
+            "available_models": available_model_names,
+            "all_metrics": {k: {mk: mv for mk, mv in v.items() if mk != "model_obj"} for k, v in metrics_all.items()},
+            "qiea_selected_features": pred_data.get("qiea_selected_features", []) if pred_data else [],
+            "qiea_best_params": pred_data.get("qiea_best_params", {}) if pred_data else {},
+        },
         "speed_sweep": sweep,
     })
+
 
 @app.get("/api/alternative-fuels")
 def get_alternative_fuels(

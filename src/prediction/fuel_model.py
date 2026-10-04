@@ -14,10 +14,10 @@ from src.prediction.evaluator import evaluate_prediction_models
 class FuelModel:
     """
     Unified fuel consumption predictor with toggleable backend modes:
-    - 'physics' (default): Analytical cubic speed and Admiralty displacement physics.
-      Fastest (~microsecond), deterministic, robust to extreme domain extrapolation.
-    - 'ml': Quantum-inspired trained Gradient Boosting regressor.
-      Captures unmodeled non-linear hydrodynamic wave surge and empirical hull condition.
+    - 'physics': Analytical cubic speed and Admiralty displacement physics.
+      Deterministic, robust to extreme domain extrapolation.
+    - 'ml': Real trained ML regressor (Quantum-Inspired Predictor, Polynomial Ridge, or Gradient Boosting).
+      Trained on empirical synthetic hydrodynamic voyage dataset.
     """
 
     def __init__(
@@ -25,10 +25,23 @@ class FuelModel:
         config: Optional[Dict[str, Any]] = None,
         trained_predictor: Optional[Any] = None,
         feature_names: Optional[list] = None,
+        model_name: str = "Quantum-Inspired Predictor",
     ):
         self.config = config or load_config()
         self.trained_predictor = trained_predictor
-        self.feature_names = feature_names
+        self.feature_names = feature_names or [
+            "vessel_handymax_feeder",
+            "vessel_panamax_feeder",
+            "vessel_small_feeder",
+            "vessel_sub_panamax_feeder",
+            "speed_knots",
+            "cargo_load_tonnes",
+            "distance_nm",
+            "weather_severity",
+            "sea_state",
+            "hull_condition",
+        ]
+        self.model_name = model_name
 
     def predict(
         self,
@@ -52,7 +65,7 @@ class FuelModel:
             weather_severity: Weather severity index in [0, 1].
             sea_state: Optional Douglas sea state scale (0-8).
             hull_condition: Hull biofouling/roughness factor (~1.0).
-            mode: 'physics' (default) or 'ml'.
+            mode: 'physics' or 'ml'.
 
         Returns:
             Estimated fuel consumption in tonnes.
@@ -70,23 +83,37 @@ class FuelModel:
             )
             return float(leg_fuel)
 
-        # ML mode: construct feature DataFrame
-        vessel_keys = list(self.config["vessel_types"].keys())
-        vessel_dummies = {f"vessel_{vk}": 1.0 if vk == vessel_type else 0.0 for vk in vessel_keys}
-
+        # ML mode: construct feature DataFrame with strictly aligned feature columns
         if sea_state is None:
             sea_state = int(np.clip(round(weather_severity * 8.0), 0, 8))
 
-        row_dict = {
-            **vessel_dummies,
+        row_dict: Dict[str, float] = {
+            "vessel_handymax_feeder": 1.0 if vessel_type == "handymax_feeder" else 0.0,
+            "vessel_panamax_feeder": 1.0 if vessel_type == "panamax_feeder" else 0.0,
+            "vessel_small_feeder": 1.0 if vessel_type == "small_feeder" else 0.0,
+            "vessel_sub_panamax_feeder": 1.0 if vessel_type == "sub_panamax_feeder" else 0.0,
             "speed_knots": float(speed_knots),
             "cargo_load_tonnes": float(cargo_load_tonnes),
             "distance_nm": float(distance_nm),
             "weather_severity": float(weather_severity),
-            "sea_state": int(sea_state),
+            "sea_state": float(sea_state),
             "hull_condition": float(hull_condition),
         }
 
+        # Order columns strictly matching feature_names or model's expected features
+        target_features = self.feature_names
+        if hasattr(self.trained_predictor, "feature_names_in_"):
+            target_features = list(self.trained_predictor.feature_names_in_)
+        elif hasattr(self.trained_predictor, "selected_features_"):
+            target_features = list(self.trained_predictor.selected_features_)
+
         X_df = pd.DataFrame([row_dict])
+        # Ensure any missing columns exist with 0.0
+        for col in target_features:
+            if col not in X_df.columns:
+                X_df[col] = 0.0
+        X_df = X_df[target_features]
+
         pred = self.trained_predictor.predict(X_df)[0]
-        return float(max(0.0, pred))
+        return float(max(0.1, pred))
+
