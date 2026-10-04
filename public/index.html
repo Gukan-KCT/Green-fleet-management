@@ -1163,15 +1163,20 @@ body {
 
       <!-- ================= 3. ALTERNATIVE FUELS VIEW ================= -->
       <section id="page-fuels" class="view-panel" style="display: none;">
+        <!-- Single Voyage Assessment Controls -->
         <div class="card">
+          <div class="card-header">
+            <div class="card-title">Voyage & Marine Fuel Candidate Configuration</div>
+            <div class="card-subtitle">Evaluate fuel consumption, cost, and lifecycle emissions for a candidate corridor</div>
+          </div>
           <div class="controls-row">
             <div class="form-group">
               <label>Vessel Archetype</label>
               <select class="form-control" id="fuel-vessel">
-                <option value="handymax_feeder">Handymax Feeder</option>
-                <option value="small_feeder">Small Feeder</option>
-                <option value="sub_panamax_feeder">Sub-Panamax</option>
-                <option value="panamax">Panamax</option>
+                <option value="handymax_feeder" selected>Handymax Feeder (1,800 TEU)</option>
+                <option value="small_feeder">Small Feeder (1,000 TEU)</option>
+                <option value="sub_panamax_feeder">Sub-Panamax (2,800 TEU)</option>
+                <option value="panamax_feeder">Panamax Feeder (4,200 TEU)</option>
               </select>
             </div>
             <div class="form-group">
@@ -1187,50 +1192,175 @@ body {
             <div class="form-group">
               <label>Upstream Feedstock Pathway</label>
               <select class="form-control" id="fuel-pathway">
-                <option value="green" selected>Green (Electrolysis / E-Fuels)</option>
-                <option value="blue">Blue (Fossil + Carbon Capture)</option>
+                <option value="green" selected>Green (Electrolysis / Bio-Feedstocks)</option>
+                <option value="blue">Blue (Fossil with Carbon Capture)</option>
                 <option value="grey">Grey (Unabated Fossil)</option>
               </select>
             </div>
           </div>
         </div>
 
+        <!-- Required Standard Comparison Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Fuel Techno-Economic & Operational Comparison Matrix</div>
+            <div class="card-subtitle">Fuel Cost, Energy Equivalence, Lifecycle CO2e, Port Readiness, and Engineering Compatibility</div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="table-fuels">
+              <thead>
+                <tr>
+                  <th>Fuel</th>
+                  <th>Fuel Cost</th>
+                  <th>Fuel Consumption</th>
+                  <th>Lifecycle CO2e</th>
+                  <th>Availability</th>
+                  <th>Compatibility</th>
+                  <th>Slot Penalty</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Comparative Charts -->
         <div class="charts-grid">
           <div class="card">
             <div class="card-header">
               <div class="card-title">Voyage Bunkering Procurement Cost ($)</div>
+              <div class="card-subtitle">Single leg expenditure based on pathway pricing</div>
             </div>
             <div id="chart-fuel-cost" class="chart-container"></div>
           </div>
           <div class="card">
             <div class="card-header">
               <div class="card-title">Lifecycle Well-to-Wake Emissions (t CO2e)</div>
+              <div class="card-subtitle">Tank-to-Wake + Well-to-Tank + Slip penalty</div>
             </div>
             <div id="chart-fuel-ghg" class="chart-container"></div>
           </div>
         </div>
 
+        <!-- FLEET OPTIMIZATION ENGINE INTEGRATION ("USE IN OPTIMIZATION") -->
+        <div class="card" style="border: 2px solid var(--teal); background: linear-gradient(180deg, #ffffff, #f0fdfa);">
+          <div class="card-header" style="border-bottom: 1px solid #ccfbf1;">
+            <div>
+              <div class="card-title" style="color: var(--teal); display: flex; align-items: center; gap: 0.5rem;">
+                <span>🚀 Fleet Optimizer Integration — "Use in Optimization"</span>
+              </div>
+              <div class="card-subtitle">Deploy selected candidate fuels into the multi-start quantum optimization engine to calculate full-network fleet plans</div>
+            </div>
+          </div>
+
+          <div style="padding: 1rem 0; display: flex; flex-direction: column; gap: 1rem;">
+            <div>
+              <label style="font-size: 0.85rem; font-weight: 600; color: var(--slate-700); margin-bottom: 0.5rem; display: block;">
+                Select Permitted Fuel Set for Optimization Decision Space:
+              </label>
+              <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="opt-fuel-hfo" checked> HFO (Conventional)
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="opt-fuel-mgo"> MGO (Distillate)
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="opt-fuel-lng" checked> LNG (Cryogenic Gas)
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="opt-fuel-methanol" checked> Methanol (Bio/E-Fuel)
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="opt-fuel-ammonia"> Ammonia (Zero-Carbon)
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="opt-fuel-hydrogen"> Hydrogen (LH2)
+                </label>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+              <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-outline" id="btn-preset-hfo-only" style="font-size: 0.78rem;">Conventional Only</button>
+                <button class="btn btn-outline" id="btn-preset-lng-trans" style="font-size: 0.78rem;">LNG Transition</button>
+                <button class="btn btn-outline" id="btn-preset-methanol-fleet" style="font-size: 0.78rem;">Methanol Fleet</button>
+                <button class="btn btn-outline" id="btn-preset-ammonia-fleet" style="font-size: 0.78rem;">Ammonia Fleet</button>
+                <button class="btn btn-outline" id="btn-preset-all-clean" style="font-size: 0.78rem;">All Clean Fuels</button>
+              </div>
+              <button class="btn btn-primary" id="btn-run-fuel-opt" style="background: var(--teal); border-color: var(--teal); height: 40px; padding: 0 1.25rem; font-weight: 700;">
+                ▶ Run Fleet Optimization with Selected Fuel(s)
+              </button>
+            </div>
+          </div>
+
+          <!-- Optimization Output Container -->
+          <div id="fuel-opt-results-area" style="display: none; border-top: 1px solid #ccfbf1; padding-top: 1.25rem; margin-top: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--teal);" id="fuel-opt-status-text">Optimization Results</h4>
+              <span class="status-badge status-pass" id="fuel-opt-winner-badge">Green Plan Selected</span>
+            </div>
+
+            <!-- KPI Cards Grid -->
+            <div class="kpi-grid" style="margin-bottom: 1.25rem;">
+              <div class="kpi-card">
+                <div class="kpi-label">Total Fuel Burn</div>
+                <div class="kpi-value" id="fuel-opt-kpi-fuel">-</div>
+                <div class="kpi-delta" id="fuel-opt-delta-fuel">vs Conventional</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Annual Operating Cost</div>
+                <div class="kpi-value" id="fuel-opt-kpi-cost">-</div>
+                <div class="kpi-delta" id="fuel-opt-delta-cost">vs Conventional</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Lifecycle CO2e (WtW)</div>
+                <div class="kpi-value" id="fuel-opt-kpi-emiss">-</div>
+                <div class="kpi-delta" id="fuel-opt-delta-emiss">vs Conventional</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Carbon Intensity</div>
+                <div class="kpi-value" id="fuel-opt-kpi-ci">-</div>
+                <div class="kpi-delta" id="fuel-opt-delta-ci">Grade A Proxy</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Cargo Delivered</div>
+                <div class="kpi-value" id="fuel-opt-kpi-cargo">-</div>
+                <div class="kpi-delta" style="color: var(--teal);">100% Feasible</div>
+              </div>
+            </div>
+
+            <!-- Corridor Fuel Deployment Table -->
+            <div style="margin-top: 1rem;">
+              <h5 style="font-size: 0.85rem; font-weight: 700; color: var(--slate-700); margin-bottom: 0.5rem;">Optimized Corridor Vessel & Fuel Allocation</h5>
+              <div class="table-responsive">
+                <table class="data-table" id="table-fuel-opt-routes">
+                  <thead>
+                    <tr>
+                      <th>Corridor</th>
+                      <th>Origin → Destination</th>
+                      <th>Vessels</th>
+                      <th>Assigned Fuel Option</th>
+                      <th>Speed</th>
+                      <th>Demand (TEU)</th>
+                      <th>Capacity (TEU)</th>
+                      <th>Reliability</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transparent Parameter Specifications & Assumptions Accordion -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Techno-Economic Fuel Matrix</div>
+            <div class="card-title">Fuel Parameter Specifications & Data Provenance</div>
+            <div class="card-subtitle">Transparent labeling of Real/Publicly Sourced, Project Assumptions, and Synthetic/Illustrative parameters</div>
           </div>
-          <div class="table-responsive">
-            <table class="data-table" id="table-fuels">
-              <thead>
-                <tr>
-                  <th>Fuel Type</th>
-                  <th>Pathway</th>
-                  <th>Bunker Mass (t)</th>
-                  <th>Voyage Cost ($)</th>
-                  <th>Lifecycle CO2e (t)</th>
-                  <th>Cargo Loss (%)</th>
-                  <th>Usable TEU</th>
-                  <th>Feasible</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
+          <div id="fuel-assumptions-container" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
         </div>
       </section>
 

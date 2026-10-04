@@ -22,12 +22,14 @@ import numpy as np
 from src.optimization.problem import FleetOptimizationProblem, DEFAULT_CANDIDATE_OPTIONS
 from src.optimization.qiea import QIEA
 from src.analysis.case_study import get_naive_baseline, get_best_conventional_baseline
+from src.analysis.fuels import build_candidate_options
 
 
 def optimize_fleet_plan(
     problem: Optional[FleetOptimizationProblem] = None,
     weights: Optional[Dict[str, float] | Tuple[float, float, float]] = None,
     allowed_fuels: Optional[List[str]] = None,
+    pathway_map: Optional[Dict[str, str]] = None,
     speed_cap: float = 18.0,
     shore_power: bool = True,
     num_qiea_starts: int = 5,
@@ -84,11 +86,10 @@ def optimize_fleet_plan(
         w_dict = {"fuel": float(f_val), "cost": float(c_val), "emissions": float(e_val)}
 
     if problem is None:
-        cand_opts = DEFAULT_CANDIDATE_OPTIONS
         if allowed_fuels is not None:
-            cand_opts = [o for o in DEFAULT_CANDIDATE_OPTIONS if o["fuel"] in allowed_fuels]
-            if not cand_opts:
-                cand_opts = DEFAULT_CANDIDATE_OPTIONS
+            cand_opts = build_candidate_options(allowed_fuels=allowed_fuels, config=config, pathway_map=pathway_map)
+        else:
+            cand_opts = DEFAULT_CANDIDATE_OPTIONS
 
         problem = FleetOptimizationProblem(
             config=config,

@@ -517,40 +517,179 @@ const fuelVessel = document.getElementById('fuel-vessel');
 const fuelRoute = document.getElementById('fuel-route');
 const fuelPathway = document.getElementById('fuel-pathway');
 
-[fuelVessel, fuelRoute, fuelPathway].forEach(el => el.addEventListener('change', loadFuels));
+if (fuelVessel && fuelRoute && fuelPathway) {
+  [fuelVessel, fuelRoute, fuelPathway].forEach(el => el.addEventListener('change', loadFuels));
+}
+
+// Preset button handlers
+const fuelPresets = {
+  'btn-preset-hfo-only': ['opt-fuel-hfo', 'opt-fuel-mgo'],
+  'btn-preset-lng-trans': ['opt-fuel-lng'],
+  'btn-preset-methanol-fleet': ['opt-fuel-methanol'],
+  'btn-preset-ammonia-fleet': ['opt-fuel-ammonia'],
+  'btn-preset-all-clean': ['opt-fuel-hfo', 'opt-fuel-lng', 'opt-fuel-methanol', 'opt-fuel-ammonia', 'opt-fuel-hydrogen'],
+};
+
+Object.keys(fuelPresets).forEach(btnId => {
+  const btn = document.getElementById(btnId);
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const activeIds = fuelPresets[btnId];
+      ['opt-fuel-hfo', 'opt-fuel-mgo', 'opt-fuel-lng', 'opt-fuel-methanol', 'opt-fuel-ammonia', 'opt-fuel-hydrogen'].forEach(chkId => {
+        const chk = document.getElementById(chkId);
+        if (chk) chk.checked = activeIds.includes(chkId);
+      });
+      runFuelOptimization();
+    });
+  }
+});
+
+const btnRunFuelOpt = document.getElementById('btn-run-fuel-opt');
+if (btnRunFuelOpt) {
+  btnRunFuelOpt.addEventListener('click', runFuelOptimization);
+}
+
+function getSelectedAllowedFuels() {
+  const fuels = [];
+  if (document.getElementById('opt-fuel-hfo')?.checked) fuels.push('HFO');
+  if (document.getElementById('opt-fuel-mgo')?.checked) fuels.push('MGO');
+  if (document.getElementById('opt-fuel-lng')?.checked) fuels.push('LNG');
+  if (document.getElementById('opt-fuel-methanol')?.checked) fuels.push('Methanol');
+  if (document.getElementById('opt-fuel-ammonia')?.checked) fuels.push('Ammonia');
+  if (document.getElementById('opt-fuel-hydrogen')?.checked) fuels.push('Hydrogen');
+  return fuels.length > 0 ? fuels : ['HFO'];
+}
+
+async function runFuelOptimization() {
+  const btn = document.getElementById('btn-run-fuel-opt');
+  const resultsArea = document.getElementById('fuel-opt-results-area');
+  const statusText = document.getElementById('fuel-opt-status-text');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Optimizing Fleet with Selected Fuel(s)...';
+  }
+  if (resultsArea) resultsArea.style.display = 'block';
+  if (statusText) statusText.innerHTML = '<span class="spinner" style="width:14px;height:14px;margin-right:6px;"></span> Optimizing Fleet Deployment...';
+
+  const selectedFuels = getSelectedAllowedFuels();
+  const p = fuelPathway ? fuelPathway.value : 'green';
+
+  try {
+    const res = await fetch(`/api/plan?allowed_fuels=${encodeURIComponent(selectedFuels.join(','))}&pathway=${p}&force_recompute=true`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const data = await res.json();
+
+    const opt = data.optimized_eval || {};
+    const naive = data.naive_eval || {};
+    const bestConv = data.best_conv_eval || {};
+
+    if (statusText) statusText.innerHTML = `✅ Optimization Complete (${selectedFuels.join(', ')})`;
+    const badge = document.getElementById('fuel-opt-winner-badge');
+    if (badge) {
+      badge.textContent = data.winner_status || 'Green Plan Selected';
+      badge.className = `status-badge ${data.winner_status?.toLowerCase().includes('green') ? 'status-pass' : 'status-fail'}`;
+    }
+
+    // KPIs
+    const optFuel = opt.total_fuel_tonnes_hfo_eq || opt.fuel_consumption_tonnes || 0;
+    const convFuel = bestConv.total_fuel_tonnes_hfo_eq || optFuel;
+    const kpiFuel = document.getElementById('fuel-opt-kpi-fuel');
+    if (kpiFuel) kpiFuel.textContent = `${fmtNum(optFuel)} t HFO-eq`;
+    const deltaFuel = document.getElementById('fuel-opt-delta-fuel');
+    if (deltaFuel) deltaFuel.textContent = fmtDelta(optFuel, convFuel);
+
+    const optCost = opt.total_operating_cost_usd || opt.total_cost_usd || 0;
+    const convCost = bestConv.total_operating_cost_usd || optCost;
+    const kpiCost = document.getElementById('fuel-opt-kpi-cost');
+    if (kpiCost) kpiCost.textContent = fmtCurr(optCost);
+    const deltaCost = document.getElementById('fuel-opt-delta-cost');
+    if (deltaCost) deltaCost.textContent = fmtDelta(optCost, convCost);
+
+    const optEmiss = opt.total_emissions_co2e_tonnes || opt.lifecycle_co2e_tonnes || 0;
+    const convEmiss = bestConv.total_emissions_co2e_tonnes || optEmiss;
+    const kpiEmiss = document.getElementById('fuel-opt-kpi-emiss');
+    if (kpiEmiss) kpiEmiss.textContent = `${fmtNum(optEmiss)} t`;
+    const deltaEmiss = document.getElementById('fuel-opt-delta-emiss');
+    if (deltaEmiss) deltaEmiss.textContent = fmtDelta(optEmiss, convEmiss);
+
+    const optCI = opt.carbon_intensity_g_tnm || 0;
+    const kpiCI = document.getElementById('fuel-opt-kpi-ci');
+    if (kpiCI) kpiCI.textContent = `${optCI.toFixed(1)} g/t-nm`;
+    const deltaCI = document.getElementById('fuel-opt-delta-ci');
+    if (deltaCI) deltaCI.textContent = optCI < 14 ? 'Grade A Proxy' : (optCI < 18 ? 'Grade B Proxy' : 'Grade C/D');
+
+    const kpiCargo = document.getElementById('fuel-opt-kpi-cargo');
+    if (kpiCargo) kpiCargo.textContent = `${fmtNum(opt.total_cargo_delivered_teu || 540000)} TEU`;
+
+    // Render Routes Table
+    const tbody = document.querySelector('#table-fuel-opt-routes tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      (data.df_routes || []).forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${r['Route ID']}: ${r['Name']}</b></td>
+          <td>${r['Origin']} → ${r['Destination']}</td>
+          <td><b>${r['Vessels']} vsl</b></td>
+          <td><span class="badge badge-navy">${r['Fuel']}</span></td>
+          <td>${r['Speed (knots)']} kn</td>
+          <td>${fmtNum(r['Demand (TEU/yr)'])}</td>
+          <td>${fmtNum(r['Capacity (TEU/yr)'])}</td>
+          <td>${r['Reliability (%)']}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+  } catch (err) {
+    console.error('Fuel optimizer error:', err);
+    if (statusText) statusText.textContent = `Optimization error: ${err.message}`;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '▶ Run Fleet Optimization with Selected Fuel(s)';
+    }
+  }
+}
 
 async function loadFuels() {
-  const v = fuelVessel.value;
-  const r = fuelRoute.value;
-  const p = fuelPathway.value;
+  const v = fuelVessel ? fuelVessel.value : 'handymax_feeder';
+  const r = fuelRoute ? fuelRoute.value : 'R1';
+  const p = fuelPathway ? fuelPathway.value : 'green';
 
   try {
     const res = await fetch(`/api/alternative-fuels?vessel=${v}&route=${r}&pathway=${p}`);
-    const rows = await res.json();
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data.records || []);
+    const paramsMap = data.structured_parameters || {};
 
     const tbody = document.querySelector('#table-fuels tbody');
-    tbody.innerHTML = '';
-    rows.forEach(row => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><b>${row.fuel_type}</b></td>
-        <td><span class="badge badge-navy">${row.pathway}</span></td>
-        <td>${row.fuel_mass_tonnes.toFixed(1)} t</td>
-        <td>$${fmtNum(row.fuel_cost_usd)}</td>
-        <td>${fmtNum(row.lifecycle_co2e_tonnes)} t</td>
-        <td>${row.cargo_loss_pct.toFixed(1)}%</td>
-        <td>${fmtNum(row.usable_teu)}</td>
-        <td><span class="status-badge ${row.bunkering_feasible ? 'status-pass' : 'status-fail'}">${row.bunkering_feasible ? 'PASS' : 'FAIL'}</span></td>
-      `;
-      tbody.appendChild(tr);
-    });
+    if (tbody) {
+      tbody.innerHTML = '';
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${row.Fuel || row.fuel_type}</b></td>
+          <td><b>${row['Fuel Cost'] || '$' + fmtNum(row.fuel_cost_usd)}</b></td>
+          <td>${row['Fuel Consumption'] || row.fuel_mass_tonnes.toFixed(1) + ' t'}</td>
+          <td><span style="color: var(--teal); font-weight: 700;">${row['Lifecycle CO2e'] || fmtNum(row.lifecycle_co2e_tonnes) + ' t'}</span></td>
+          <td><span class="status-badge ${row.bunkering_feasible ? 'status-pass' : 'status-fail'}">${row.Availability || (row.bunkering_feasible ? 'PASS' : 'FAIL')}</span></td>
+          <td><span class="status-badge ${row.is_compatible ? 'status-pass' : 'status-fail'}">${row.Compatibility || (row.is_compatible ? 'Compatible' : 'Incompatible')}</span></td>
+          <td>${row.cargo_loss_pct != null ? row.cargo_loss_pct.toFixed(1) + '%' : '0.0%'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
 
     // Cost Bar
     Plotly.newPlot('chart-fuel-cost', [{
-      x: rows.map(r => r.fuel_type),
+      x: rows.map(r => r.fuel_type || r.Fuel),
       y: rows.map(r => r.fuel_cost_usd),
       type: 'bar',
-      marker: { color: '#0f4c81' }
+      marker: { color: ['#0f4c81', '#1e293b', '#2a9d8f', '#0d9488', '#d97706', '#e11d48'].slice(0, rows.length) },
+      text: rows.map(r => '$' + fmtNum(r.fuel_cost_usd)),
+      textposition: 'auto'
     }], {
       margin: { t: 20, r: 20, l: 60, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
@@ -561,10 +700,12 @@ async function loadFuels() {
 
     // Lifecycle GHG Bar
     Plotly.newPlot('chart-fuel-ghg', [{
-      x: rows.map(r => r.fuel_type),
+      x: rows.map(r => r.fuel_type || r.Fuel),
       y: rows.map(r => r.lifecycle_co2e_tonnes),
       type: 'bar',
-      marker: { color: '#0d9488' }
+      marker: { color: ['#2b2d42', '#334155', '#457b9d', '#0d9488', '#10b981', '#06b6d4'].slice(0, rows.length) },
+      text: rows.map(r => fmtNum(r.lifecycle_co2e_tonnes) + ' t'),
+      textposition: 'auto'
     }], {
       margin: { t: 20, r: 20, l: 50, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
@@ -572,6 +713,44 @@ async function loadFuels() {
       font: { family: 'Inter, sans-serif' },
       yaxis: { title: 'Well-to-Wake CO2e (t)', gridcolor: '#f1f5f9' }
     }, { responsive: true, displayModeBar: false });
+
+    // Render Assumptions & Parameters Container
+    const assumptionsContainer = document.getElementById('fuel-assumptions-container');
+    if (assumptionsContainer && paramsMap) {
+      assumptionsContainer.innerHTML = '';
+      Object.keys(paramsMap).forEach(fk => {
+        const fp = paramsMap[fk];
+        const card = document.createElement('div');
+        card.style.border = '1px solid var(--slate-200)';
+        card.style.borderRadius = 'var(--radius)';
+        card.style.padding = '0.85rem 1rem';
+        card.style.backgroundColor = '#fff';
+
+        const assumptionsList = Object.keys(fp.assumptions || {}).map(ak => {
+          const src = fp.assumptions[ak];
+          const isReal = src.includes('Real / Publicly Sourced');
+          const isProj = src.includes('Project Assumption');
+          const badgeBg = isReal ? '#dcfce7' : (isProj ? '#fef3c7' : '#f1f5f9');
+          const badgeCol = isReal ? '#15803d' : (isProj ? '#b45309' : '#475569');
+          const tag = isReal ? '[REAL]' : (isProj ? '[PROJECT]' : '[SYNTHETIC]');
+          return `<div style="display:flex; justify-content:space-between; align-items:center; background:${badgeBg}; color:${badgeCol}; padding:4px 8px; border-radius:4px; margin-bottom:4px; font-size:11px;">
+            <span><b>${ak.replace('_', ' ').toUpperCase()}:</b> ${src}</span>
+            <span style="font-weight:700;">${tag}</span>
+          </div>`;
+        }).join('');
+
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <h4 style="font-size:0.9rem; font-weight:700; color:var(--slate-800);">● ${fp.fuel_name} (${fp.energy_density_label})</h4>
+            <span class="badge badge-navy">${fp.fuel_category}</span>
+          </div>
+          <p style="font-size:0.75rem; color:var(--slate-500); margin-bottom:0.5rem;">Storage: ${fp.tank_storage_factor?.storage_type} | Cargo Slot Loss: ${fp.tank_storage_factor?.capacity_penalty_pct}%</p>
+          <div style="font-size:0.75rem; color:var(--slate-600); margin-bottom:0.5rem;"><b>Vessel Compatibility:</b> ${fp.vessel_compatibility?.join(', ')}</div>
+          <div>${assumptionsList}</div>
+        `;
+        assumptionsContainer.appendChild(card);
+      });
+    }
 
   } catch (err) {
     console.error('Error loading fuels:', err);

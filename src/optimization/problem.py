@@ -38,6 +38,7 @@ from src.models.physics import (
     calculate_schedule_reliability,
     calculate_berth_energy_and_emissions,
 )
+from src.analysis.fuels import VESSEL_FUEL_COMPATIBILITY
 
 
 DEFAULT_CANDIDATE_OPTIONS = [
@@ -318,6 +319,7 @@ class FleetOptimizationProblem:
             "reliability": 0.0,
             "vessel_availability": 0.0,
             "fuel_bunkering": 0.0,
+            "vessel_compatibility": 0.0,
             "carbon_intensity": 0.0,
             "supply_cap": 0.0,
         }
@@ -381,6 +383,11 @@ class FleetOptimizationProblem:
                 fuel_type = opt["fuel"]
                 pathway = opt.get("pathway", "default")
                 v_cfg = self.config["vessel_types"][v_type]
+
+                # Vessel-Fuel engineering compatibility check
+                compat_fuels = VESSEL_FUEL_COMPATIBILITY.get(v_type, ["HFO", "MGO"])
+                if fuel_type not in compat_fuels:
+                    constraint_violations["vessel_compatibility"] += float(n_vessels) * 10.0
 
                 # Bunkering feasibility check: fuel must be supported at origin or destination
                 orig_supp = fuel_type in orig_port.get("supported_fuels", [])

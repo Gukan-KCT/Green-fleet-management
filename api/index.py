@@ -196,6 +196,8 @@ def get_plan(
     w_emiss: float = Query(0.4, ge=0.0, le=1.0),
     speed_cap: float = Query(18.0, ge=10.0, le=25.0),
     shore_power: bool = Query(True),
+    allowed_fuels: Optional[str] = Query(None),
+    pathway: Optional[str] = Query("green"),
     force_recompute: bool = Query(False),
 ):
     """Calculates or retrieves precomputed multi-objective fleet optimization plan via unified optimize_fleet_plan."""
@@ -206,12 +208,15 @@ def get_plan(
     else:
         w_fuel, w_cost, w_emiss = 0.2, 0.4, 0.4
 
+    fuels_list = [f.strip() for f in allowed_fuels.split(",") if f.strip()] if allowed_fuels else None
+
     is_default = (
         abs(w_fuel - 0.2) < 1e-3
         and abs(w_cost - 0.4) < 1e-3
         and abs(w_emiss - 0.4) < 1e-3
         and shore_power is True
         and speed_cap >= 18.0
+        and fuels_list is None
         and not force_recompute
     )
 
@@ -232,19 +237,20 @@ def get_plan(
             })
 
     cfg = load_config()
-    prob = FleetOptimizationProblem(
-        config=cfg,
-        weights={"fuel": w_fuel, "cost": w_cost, "emissions": w_emiss},
-        speed_cap_delta=speed_cap - 18.0,
-        shore_power_forced=shore_power,
-    )
+    pw_map = {f: pathway for f in (fuels_list or ["Methanol", "Ammonia", "Hydrogen"])}
 
     opt_res = optimize_fleet_plan(
-        problem=prob,
+        allowed_fuels=fuels_list,
+        pathway_map=pw_map,
+        weights={"fuel": w_fuel, "cost": w_cost, "emissions": w_emiss},
+        speed_cap=speed_cap,
+        shore_power=shore_power,
         num_qiea_starts=2,
         evals_per_start=1000,
         seeds=[42, 43],
+        config=cfg,
     )
+    prob = opt_res["problem"]
     opt_eval = opt_res["selected_plan"]
     routes = build_routes_df(prob, opt_eval)
 
@@ -517,6 +523,7 @@ def get_alternative_fuels(
     pathway: str = Query("green"),
 ):
     """Evaluates comparative energy density, cargo displacement, and lifecycle GHG per fuel."""
+    from src.analysis.fuels import FUEL_STRUCTURED_PARAMETERS, VESSEL_FUEL_COMPATIBILITY
     cfg = load_config()
     pathways = {f: pathway for f in ["Methanol", "Ammonia", "Hydrogen"]}
     df = compare_fuels_for_voyage(
@@ -525,7 +532,11 @@ def get_alternative_fuels(
         pathway_choices=pathways,
         config=cfg,
     )
-    return clean_json(df.to_dict(orient="records"))
+    return clean_json({
+        "records": df.to_dict(orient="records"),
+        "structured_parameters": FUEL_STRUCTURED_PARAMETERS,
+        "vessel_compatibility": VESSEL_FUEL_COMPATIBILITY,
+    })
 
 @app.get("/api/shore-power")
 def get_shore_power():
