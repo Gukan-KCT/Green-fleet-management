@@ -691,9 +691,14 @@ def get_benchmark():
 
 @app.get("/api/case-study")
 def get_case_study():
-    """Returns comprehensive South Asian feeder network case study simulation."""
-    saved = load_pkl("saved_case_study.pkl")
-    return clean_json(saved)
+    """Returns comprehensive South Asian feeder network case study simulation with provenance metadata."""
+    from src.models.provenance import get_provenance_dataframe, get_provenance_summary_counts
+    saved = load_pkl("saved_case_study.pkl") or {}
+    out = dict(saved)
+    df_prov = get_provenance_dataframe()
+    out["provenance"] = df_prov.to_dict(orient="records")
+    out["provenance_counts"] = get_provenance_summary_counts()
+    return clean_json(out)
 
 # --- Mount Static Frontend ---
 PUBLIC_DIR = PROJECT_ROOT / "public"

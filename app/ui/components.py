@@ -21,6 +21,8 @@ def render_top_strip(
     show_presets: bool = True,
     on_preset_selected: Optional[callable] = None,
     demo_only: bool = False,
+    chip_label: str = "Synthetic Data",
+    chip_color: Optional[str] = None,
 ):
     """
     Renders a unified top header strip with title, slim synthetic disclosure chip,
@@ -45,6 +47,10 @@ def render_top_strip(
             border-radius:20px; letter-spacing:.04em; text-transform:uppercase;
         ">&#9888; Demo Network Only</span>""" if demo_only else ""
 
+        chip_bg = "rgba(13,148,136,.12)" if "public" in chip_label.lower() else "rgba(245,158,11,.12)"
+        chip_border = "rgba(13,148,136,.35)" if "public" in chip_label.lower() else "rgba(245,158,11,.35)"
+        chip_txt = "#0f766e" if "public" in chip_label.lower() else "#92400e"
+
         st.markdown(
             f"""
             <div style="
@@ -58,10 +64,10 @@ def render_top_strip(
                 border-radius:20px; letter-spacing:.04em;
               ">&#9875; {net_chip}</span>
               <span style="
-                background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.35);
-                color:#92400e; font-size:10.5px; font-weight:600; padding:2px 8px;
+                background:{chip_bg}; border:1px solid {chip_border};
+                color:{chip_txt}; font-size:10.5px; font-weight:600; padding:2px 8px;
                 border-radius:20px; letter-spacing:.04em; text-transform:uppercase;
-              ">&#9670; Synthetic Data</span>
+              ">&#9670; {chip_label}</span>
               <span style="
                 background:rgba(15,76,129,.08); border:1px solid rgba(15,76,129,.2);
                 color:#0f4c81; font-size:10.5px; font-weight:600; padding:2px 8px;

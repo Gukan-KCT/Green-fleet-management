@@ -47,7 +47,7 @@ with st.expander("1. Multi-Objective Fleet Optimization Problem Formulation", ex
         r"\Pi(\mathbf{x})"
     )
     st.markdown(
-        """
+        r"""
         where:
         - $\mathbf{x} \in \{0, 1\}^L$ is the binary decision bitstring.
         - $w_f, w_c, w_e \ge 0$ are user-specified objective weights satisfying $w_f + w_c + w_e = 1$.
@@ -63,7 +63,7 @@ with st.expander("2. Naval Architecture Hydrodynamics & Fuel Consumption Laws", 
         r"F_{\text{leg}} = F_{\text{daily}}(V) \times \Phi_{\text{load}}(L) \times \Phi_{\text{weather}}(W) \times T_{\text{transit}}(d, V)"
     )
     st.markdown(
-        """
+        r"""
         1. **Propulsion Power Cubic Law:** $F_{\text{daily}}(V) = F_{\text{ref}} \left(\frac{V}{V_{\text{ref}}}\right)^3$
         2. **Admiralty Displacement Scaling:** $\Phi_{\text{load}}(L) = \left(\frac{\Delta_{\text{lightship}} + L}{\Delta_{\text{lightship}} + L_{\text{ref}}}\right)^{2/3}$
         3. **Weather Resistance Penalty:** $\Phi_{\text{weather}}(W) = 1 + k_w \cdot W$ (where $k_w = 0.35$, $W \in [0, 1]$)
@@ -94,7 +94,7 @@ with st.expander("3. Quantum-Inspired Evolutionary Algorithm (QIEA) Derivation",
         r"|q_j\rangle = \cos(\theta_j)|0\rangle + \sin(\theta_j)|1\rangle, \quad \theta_j \in [0, \pi/2]"
     )
     st.markdown(
-        """
+        r"""
         The probability of observing bit $x_j = 1$ is $P(x_j = 1) = \sin^2(\theta_j)$.
         At generation $t=0$, setting $\theta_j = \pi/4$ yields $P(1) = P(0) = 0.50$, representing an equal superposition of all $2^L$ configurations.
         """
@@ -104,7 +104,7 @@ with st.expander("3. Quantum-Inspired Evolutionary Algorithm (QIEA) Derivation",
         r"\theta_{i, j}^{(t+1)} = \theta_{i, j}^{(t)} + \Delta\theta_{i, j}"
     )
     st.markdown(
-        """
+        r"""
         where $\Delta\theta_{i, j} = \pm 0.05 \text{ rad} \approx 2.86^\circ$ directs the phase angle toward the corresponding bit of the current global best solution $\mathbf{b}^*$.
         """
     )
@@ -112,7 +112,7 @@ with st.expander("3. Quantum-Inspired Evolutionary Algorithm (QIEA) Derivation",
 # --- 4. Constraints & Mathematical Penalties ---
 with st.expander("4. Regulatory & Operational Constraints", expanded=False):
     st.markdown(
-        """
+        r"""
         1. **Cargo Demand Coverage:** For each corridor $r$, annual supplied capacity must meet or exceed annual demand:
            $$\sum_{o} n_{o, r} \cdot \text{Trips}_{o, r} \cdot \text{Capacity}_o \ge \text{Demand}_r$$
         2. **Commercial Service Frequency:** Minimum sailing frequency must be satisfied:
@@ -158,7 +158,7 @@ with st.expander("5. System Configuration & Techno-Economic Parameter Registry",
 with st.expander("6. Methodology Disclaimers & Scope Limitations", expanded=False):
     st.markdown(
         """
-        - **Synthetic Illustrative Data:** All hydrodynamic curves, bunker fuel prices, grid emission factors, and cargo demands are formulated strictly for demonstration and research purposes.
+        - **Public-Data-Informed Prototype Case Study:** The South Asian regional feeder case study is a reproducible prototype informed by authoritative public data (JNPA, SLPA, ChPA, MPA port statistics, CEA India grid emission factors, and IMO LCA guidelines). Where live operational telemetry is unavailable, parameters are transparently derived from naval architecture standards or marked as project assumptions. It is not live commercial vessel telemetry.
         - **Classical Computational Execution:** The Quantum-Inspired Evolutionary Algorithm (QIEA) is executed entirely on classical CPU hardware (NumPy/Python). No quantum hardware, simulators, or claims of quantum supremacy are involved.
         - **Feasibility Verification:** All comparisons benchmark the optimized plan against both a Feasible Naive Baseline (conventional HFO, fixed speed, no cold ironing) and the Best Conventional Baseline (HFO-only optimizer).
         """

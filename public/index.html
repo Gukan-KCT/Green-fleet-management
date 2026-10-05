@@ -1311,7 +1311,7 @@ body {
         <p id="view-subtitle">Multi-objective quantum-inspired fleet deployment workspace</p>
       </div>
       <div class="badge-group">
-        <span class="badge badge-amber">◆ Synthetic Prototype</span>
+        <span class="badge badge-teal" style="background:rgba(13,148,136,.15);color:#0f766e;border:1px solid rgba(13,148,136,.3);">◆ Public-Data-Informed Prototype</span>
         <span class="badge badge-navy">■ Classical CPU</span>
       </div>
     </header>
@@ -2387,6 +2387,7 @@ body {
           <button class="tab-btn active" data-tab="case-tab-fleet">🚢 Corridor Fleet Deployment</button>
           <button class="tab-btn" data-tab="case-tab-monsoon">🌦️ 12-Month Monsoon Seasonality</button>
           <button class="tab-btn" data-tab="case-tab-plans">🎯 4-Plan Strategy Comparison</button>
+          <button class="tab-btn" data-tab="case-tab-provenance">📋 Data Sources & Assumptions</button>
         </div>
 
         <!-- Tab 1: Corridor Deployment -->
@@ -2437,6 +2438,57 @@ body {
               <div class="card-subtitle">Annual lifecycle GHG emissions across 4 reference fleet deployment strategies</div>
             </div>
             <div id="chart-casestudy-plans" class="chart-container" style="height: 360px;"></div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Data Sources & Assumptions (Provenance) -->
+        <div id="pane-case-tab-provenance" style="display: none;">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">A. Publicly Sourced</div>
+              <div class="kpi-value" id="prov-count-a">14</div>
+              <div class="kpi-delta good">Port Authorities, IMO, UNCTAD, CEA</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">B. Derived from Public</div>
+              <div class="kpi-value" id="prov-count-b">10</div>
+              <div class="kpi-delta" style="color:var(--primary);">Detour Distances & Naval Arch Models</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">C. Project Assumptions</div>
+              <div class="kpi-value" id="prov-count-c">11</div>
+              <div class="kpi-delta" style="color:var(--amber-700);">Bunker Indices, Charter Rates, Demand</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">D. Synthetic / Illustrative</div>
+              <div class="kpi-value" id="prov-count-d">1</div>
+              <div class="kpi-delta" style="color:var(--slate-500);">Reference Carbon Tax Proxy ($80/t)</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 1rem;">
+            <div class="card-header">
+              <div class="card-title">Data Sources & Assumptions Registry</div>
+              <div class="card-subtitle">Rigorous provenance audit for South Asian feeder network inputs (Ports, Routes, Vessels, Fuels, Shore Power)</div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="table-provenance">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Field</th>
+                    <th>Value</th>
+                    <th>Unit</th>
+                    <th>Source Type</th>
+                    <th>Authoritative Source</th>
+                    <th>Year</th>
+                    <th>Assumption?</th>
+                    <th>Calculation Basis / Notes</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -4632,6 +4684,47 @@ async function loadCaseStudy() {
       `;
       tbody.appendChild(tr);
     });
+
+    // Populate Data Sources & Assumptions (Provenance)
+    const provList = data.provenance || [];
+    const provCounts = data.provenance_counts || {};
+
+    if (provCounts['A. Publicly sourced'] != null) {
+      const elA = document.getElementById('prov-count-a');
+      const elB = document.getElementById('prov-count-b');
+      const elC = document.getElementById('prov-count-c');
+      const elD = document.getElementById('prov-count-d');
+      if (elA) elA.textContent = provCounts['A. Publicly sourced'];
+      if (elB) elB.textContent = provCounts['B. Derived/calculated from public data'];
+      if (elC) elC.textContent = provCounts['C. Project assumption'];
+      if (elD) elD.textContent = provCounts['D. Synthetic/illustrative'];
+    }
+
+    const tbodyProv = document.querySelector('#table-provenance tbody');
+    if (tbodyProv && provList.length > 0) {
+      tbodyProv.innerHTML = '';
+      provList.forEach(p => {
+        const tr = document.createElement('tr');
+        let badgeClass = 'status-pass';
+        if (p['Source Type'].startsWith('A.')) badgeClass = 'status-pass';
+        else if (p['Source Type'].startsWith('B.')) badgeClass = 'status-navy';
+        else if (p['Source Type'].startsWith('C.')) badgeClass = 'status-amber';
+        else badgeClass = 'status-fail';
+
+        tr.innerHTML = `
+          <td><b>${p['Category']}</b></td>
+          <td>${p['Field']}</td>
+          <td><b>${p['Value']}</b></td>
+          <td>${p['Unit']}</td>
+          <td><span class="status-badge ${badgeClass}">${p['Source Type']}</span></td>
+          <td>${p['Source']}</td>
+          <td>${p['Year']}</td>
+          <td>${p['Assumption?'] === 'Yes' ? '<span style="color:#b45309;font-weight:600;">Yes</span>' : '<span style="color:#0f766e;font-weight:600;">No</span>'}</td>
+          <td><small style="color:var(--slate-600);">${p['Calculation / Basis']}</small></td>
+        `;
+        tbodyProv.appendChild(tr);
+      });
+    }
 
   } catch (err) {
     console.error('Error loading case study:', err);

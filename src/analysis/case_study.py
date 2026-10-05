@@ -306,6 +306,8 @@ def run_case_study(
     generations: int = 100,
     random_seed: int = 42,
     config: Optional[Dict[str, Any]] = None,
+    evals_per_start: Optional[int] = None,
+    num_starts: int = 5,
 ) -> Dict[str, Any]:
     """
     Run complete comparative Case Study across FOUR distinct operational plans:
@@ -330,12 +332,14 @@ def run_case_study(
         shore_power_forced=True,
     )
 
-    # 1. Optimize Balanced Plan (uses optimize_fleet_plan with 5 unseeded QIEA multi-starts)
+    budget_per_start = evals_per_start if evals_per_start is not None else (pop_size * generations)
+
+    # 1. Optimize Balanced Plan (uses optimize_fleet_plan with unseeded QIEA multi-starts)
     balanced_res = optimize_fleet_plan(
         problem=prob_balanced,
-        num_qiea_starts=5,
-        evals_per_start=4000,
-        seeds=[random_seed, random_seed + 1, random_seed + 2, random_seed + 3, random_seed + 4],
+        num_qiea_starts=num_starts,
+        evals_per_start=budget_per_start,
+        seeds=[random_seed + i for i in range(num_starts)],
     )
     naive_eval = balanced_res["naive_eval"]
     naive_bits = balanced_res["naive_bits"]
@@ -347,9 +351,9 @@ def run_case_study(
     # 2. Optimize Green Plan (emission-heavy weights)
     green_res = optimize_fleet_plan(
         problem=prob_green,
-        num_qiea_starts=5,
-        evals_per_start=4000,
-        seeds=[random_seed + 10, random_seed + 11, random_seed + 12, random_seed + 13, random_seed + 14],
+        num_qiea_starts=num_starts,
+        evals_per_start=budget_per_start,
+        seeds=[random_seed + 10 + i for i in range(num_starts)],
     )
     green_eval = green_res["selected_plan"]
     green_bits = green_res["selected_bits"]
